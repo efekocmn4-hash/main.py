@@ -168,5 +168,7 @@ import os
 
 # ... bot kodunun geri kalanı ...
 
-token = os.environ['DISCORD_TOKEN']
-bot.run("MTUzNTMxNDQzMzE1OTQ2MzAzMw.GJJS2J.8JVYxn5G73fabiwMq3_PivWW0n64tnBQYNGdJE")
+import os
+
+bot.run(os.environ['DISCORD_TOKEN'])
+
