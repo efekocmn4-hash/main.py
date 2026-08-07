@@ -470,6 +470,83 @@ async def tam_yasak_kaldir(interaction: discord.Interaction, kullanici_id: str, 
 # --- BOTU BAŞLAT ---
 token = os.environ.get('DISCORD_TOKEN')
 bot.run(token)
-    
+# --- SLASH KOMUTU: /tam-yasak-kaldır ---
+@bot.tree.command(name="tam-yasak-kaldır", description="Kullanıcı yasağını sunucuda veya tüm Kara sunucularında kaldırıp DM atar.")
+@app_commands.checks.has_permissions(ban_members=True)
+@app_commands.describe(
+    kullanici_id="Yasağı kaldırılacak kullanıcının Discord ID'si",
+    secenek="Yasağın kaldırılacağı kapsamı seçin",
+    sebep="Yasağın kaldırılma sebebi"
+)
+@app_commands.choices(secenek=[
+    app_commands.Choice(name="Bu Sunucuda Yasağı Kaldır", value="bu_sunucu"),
+    app_commands.Choice(name="Tüm Kara Sunucularından Yasak Kaldır", value="tum_kara")
+])
+async def tam_yasak_kaldir(interaction: discord.Interaction, kullanici_id: str, secenek: app_commands.Choice[str], sebep: str = "Sebep belirtilmedi"):
+    await interaction.response.defer(ephemeral=False)
+
+    try:
+        user_id = int(kullanici_id)
+        user = await bot.fetch_user(user_id)
+    except ValueError:
+        await interaction.followup.send("Geçersiz Kullanıcı ID'si girdiniz.")
+        return
+    except discord.NotFound:
+        await interaction.followup.send("Belirtilen ID'ye sahip bir kullanıcı bulunamadı.")
+        return
+
+    basarili_sunucular = []
+
+    # 1. Seçenek: Bu Sunucuda Yasağı Kaldır
+    if secenek.value == "bu_sunucu":
+        try:
+            await interaction.guild.unban(user, reason=f"{interaction.user} tarafından: {sebep}")
+            basarili_sunucular.append(interaction.guild.name)
+        except discord.NotFound:
+            await interaction.followup.send("Bu kullanıcı bu sunucuda banlı değil.")
+            return
+        except discord.Forbidden:
+            await interaction.followup.send("Bu sunucuda ban kaldırmak için botun yeterli yetkisi yok.")
+            return
+
+    # 2. Seçenek: Tüm Kara Sunucularından Yasak Kaldır
+    elif secenek.value == "tum_kara":
+        for guild in bot.guilds:
+            try:
+                await guild.unban(user, reason=f"[TÜM KARA UNBAN] {interaction.user} tarafından: {sebep}")
+                basarili_sunucular.append(guild.name)
+            except (discord.NotFound, discord.Forbidden):
+                continue
+
+    if not basarili_sunucular:
+        await interaction.followup.send("Hiçbir sunucuda aktif ban bulunamadı.")
+        return
+
+    # Sunucu Bilgilendirme Embed Mesajı
+    embed = discord.Embed(title="Yasak Kaldırma İşlemi Tamamlandı", color=discord.Color.green())
+    embed.add_field(name="Kullanıcı", value=f"{user.name} (`{user.id}`)", inline=False)
+    embed.add_field(name="İşlemi Yapan Yetkili", value=f"{interaction.user.mention} ({interaction.user})", inline=False)
+    embed.add_field(name="Kapsam", value=secenek.name, inline=False)
+    embed.add_field(name="Kaldırılan Sunucular", value=", ".join(basarili_sunucular), inline=False)
+    embed.add_field(name="Sebep", value=sebep, inline=False)
+
+    await interaction.followup.send(embed=embed)
+
+    # Kullanıcıya Gönderilen DM Bildirimi (Yetkili Bilgisi Dahil)
+    try:
+        dm_embed = discord.Embed(
+            title="Yasağınız Kaldırıldı",
+            description=f"**{secenek.name}** kapsamında yasağınız kaldırılmıştır.",
+            color=discord.Color.green()
+        )
+        dm_embed.add_field(name="Yasağı Kaldıran Yetkili", value=f"{interaction.user} ({interaction.user.display_name})", inline=False)
+        dm_embed.add_field(name="Sebep", value=sebep, inline=False)
+        dm_embed.set_footer(text="Aramıza tekrar hoş geldiniz.")
+        await user.send(embed=dm_embed)
+    except discord.Forbidden:
+        await interaction.channel.send("Kullanıcının DM kutusu kapalı olduğu için özel bilgilendirme mesajı gönderilemedi.")
+        
+
+
         
 
