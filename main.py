@@ -164,4 +164,9 @@ async def ticket_kur(interaction: discord.Interaction, kanal: discord.TextChanne
 
 # --- BAŞLATMA ---
 keep_alive() # Web sunucusunu başlatır
-bot.run("MTUzNTMxNDQzMzE1OTQ2MzAzMw.G064AJ.I5bVuu-LclAFqVRyPKr8S5EgmoSObTtjx2hfIk")
+import os
+
+# ... bot kodunun geri kalanı ...
+
+token = os.environ['DISCORD_TOKEN']
+bot.run(MTUzNTMxNDQzMzE1OTQ2MzAzMw.G7a9-O.3LICuTEqDZaoaweoyVdkF0A9mQjUrATPVJuxkg)
