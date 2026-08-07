@@ -3,8 +3,9 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import asyncio
+from datetime import timedelta
 
-# Render panelindeki anahtar adın 'DISCORD_TOKEN' olduğu için buraya göre ayarlandı
+# Token'ı Railway panelindeki 'DISCORD_TOKEN' değişkeninden çeker
 TOKEN = os.environ.get("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
@@ -64,29 +65,59 @@ async def bildirim_gonder(member, islem, sebep):
 
 
 # ==========================================
-# 1. /tamyasak KOMUTU
+# 1. /tamyasak KOMUTU (Seçmeli: Tek veya Tüm Sunucular)
 # ==========================================
-@bot.tree.command(name="tamyasak", description="Belirtilen kullanıcıyı botun bulunduğu tüm sunuculardan yasaklar.")
+class TamYasakSelect(discord.ui.Select):
+    def __init__(self, member, sebep):
+        self.member = member
+        self.sebep = sebep
+        options = [
+            discord.SelectOption(label="Sadece Bu Sunucudan Yasakla", value="tek", description="Yasaklama yalnızca bu sunucuda uygulanır."),
+            discord.SelectOption(label="Tüm Sunuculardan Yasakla", value="tum", description="Botun bulunduğu tüm ortak sunuculardan yasaklanır.")
+        ]
+        super().__init__(placeholder="Yasaklama kapsamını seçin...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+        secim = self.values[0]
+        yasaklanan_yerler = []
+
+        if secim == "tek":
+            try:
+                await bildirim_gonder(self.member, f"{interaction.guild.name} Sunucusundan Yasaklandınız", self.sebep)
+                await interaction.guild.ban(self.member, reason=f"Tekil Yasak - Yetkili: {interaction.user} | Sebep: {self.sebep}")
+                yasaklanan_yerler.append(interaction.guild.name)
+            except Exception:
+                await interaction.followup.send("Kullanıcı bu sunucudan yasaklanamadı (Yetkim yetersiz olabilir).", ephemeral=True)
+                return
+        elif secim == "tum":
+            for guild in bot.guilds:
+                try:
+                    await bildirim_gonder(self.member, f"Tüm Sunuculardan Yasaklandınız", self.sebep)
+                    await guild.ban(self.member, reason=f"Tam Yasak - Yetkili: {interaction.user} | Sebep: {self.sebep}")
+                    yasaklanan_yerler.append(guild.name)
+                except Exception:
+                    continue
+
+        embed = discord.Embed(title="🚨 Yasaklama İşlemi Tamamlandı", color=discord.Color.dark_red())
+        embed.add_field(name="Hedef Kullanıcı", value=f"{self.member} (`{self.member.id}`)", inline=False)
+        embed.add_field(name="İşlemi Yapan", value=interaction.user.mention, inline=False)
+        embed.add_field(name="Sebep", value=self.sebep, inline=False)
+        embed.add_field(name="İşlem Yapılan Sunucular", value=", ".join(yasaklanan_yerler), inline=False)
+        
+        await interaction.followup.send(embed=embed)
+
+class TamYasakView(discord.ui.View):
+    def __init__(self, member, sebep):
+        super().__init__(timeout=60)
+        self.add_item(TamYasakSelect(member, sebep))
+
+@bot.tree.command(name="tamyasak", description="Kullanıcıyı sadece bu sunucudan veya tüm sunuculardan seçmeli olarak yasaklar.")
 @app_commands.checks.has_permissions(ban_members=True)
 async def tamyasak(interaction: discord.Interaction, member: discord.Member, sebep: str):
-    await interaction.response.defer(thinking=True)
-    await bildirim_gonder(member, "Tüm sunuculardan yasaklandınız.", sebep)
-    
-    basarili_sunucular = []
-    for guild in bot.guilds:
-        try:
-            await guild.ban(member, reason=f"Tam Yasak - Yetkili: {interaction.user} | Sebep: {sebep}")
-            basarili_sunucular.append(guild.name)
-        except Exception:
-            continue
-
-    embed = discord.Embed(title="🚨 Tam Yasak Uygulandı", color=discord.Color.dark_red())
-    embed.add_field(name="Hedef Kullanıcı", value=f"{member} (`{member.id}`)", inline=False)
-    embed.add_field(name="İşlemi Yapan", value=interaction.user.mention, inline=False)
-    embed.add_field(name="Sebep", value=sebep, inline=False)
-    embed.add_field(name="Yasaklanan Sunucular", value=", ".join(basarili_sunucular) if basarili_sunucular else "Hiçbir sunucu", inline=False)
-    
-    await interaction.followup.send(embed=embed)
+    view = TamYasakView(member, sebep)
+    embed = discord.Embed(title="⚠️ Yasaklama Kapsamı Seçimi", description=f"**{member}** için yasaklama türünü seçiniz.", color=discord.Color.red())
+    await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 # ==========================================
@@ -149,7 +180,27 @@ async def tamyasakkaldir(interaction: discord.Interaction, user_id: str):
 
 
 # ==========================================
-# 3. /ticket-olustur KOMUTU
+# 3. /mute KOMUTU (Zaman Aşımı)
+# ==========================================
+@bot.tree.command(name="mute", description="Kullanıcıya belirli bir süre zaman aşımı (mute) uygular.")
+@app_commands.checks.has_permissions(moderate_members=True)
+async def mute(interaction: discord.Interaction, member: discord.Member, dakika: int, sebep: str):
+    durum_suresi = timedelta(minutes=dakika)
+    try:
+        await member.timeout(durum_suresi, reason=sebep)
+        await bildirim_gonder(member, f"{interaction.guild.name} Sunucusunda Mutelediniz", sebep)
+        
+        embed = discord.Embed(title="🔇 Kullanıcı Muteleendi", color=discord.Color.orange())
+        embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
+        embed.add_field(name="Süre", value=f"{dakika} dakika", inline=False)
+        embed.add_field(name="Sebep", value=sebep, inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"Mute atılırken bir hata oluştu: {e}", ephemeral=True)
+
+
+# ==========================================
+# 4. /ticket-olustur KOMUTU
 # ==========================================
 class TicketCreateView(discord.ui.View):
     def __init__(self):
@@ -196,7 +247,7 @@ async def ticket_olustur(interaction: discord.Interaction):
 
 
 # ==========================================
-# 4. /dm KOMUTU
+# 5. /dm KOMUTU
 # ==========================================
 @bot.tree.command(name="dm", description="Bir kullanıcıya özel mesaj gönderir.")
 @app_commands.checks.has_permissions(manage_messages=True)
@@ -211,7 +262,7 @@ async def dm(interaction: discord.Interaction, member: discord.Member, mesaj: st
 
 
 # ==========================================
-# 5. /rolver ve /rolal KOMUTLARI
+# 6. /rolver ve /rolal KOMUTLARI
 # ==========================================
 @bot.tree.command(name="rolver", description="Kullanıcıya belirtilen rolü verir.")
 @app_commands.checks.has_permissions(manage_roles=True)
@@ -227,7 +278,7 @@ async def rolal(interaction: discord.Interaction, member: discord.Member, role: 
 
 
 # ==========================================
-# 6. /rollerigeri KOMUTU (Çekilen Rolleri İade)
+# 7. /rollerigeri KOMUTU (Çekilen Rolleri İade)
 # ==========================================
 @bot.tree.command(name="rollerigeri", description="Güvenlik sistemi tarafından alınan rolleri anında geri verir.")
 @app_commands.checks.has_permissions(administrator=True)
@@ -245,4 +296,3 @@ async def rollerigeri(interaction: discord.Interaction, member: discord.Member):
 
 if __name__ == "__main__":
     bot.run(TOKEN)
-                       
