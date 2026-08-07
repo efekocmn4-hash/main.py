@@ -110,7 +110,7 @@ async def on_member_update(before, after):
                 for channel in after.guild.text_channels:
                     if "log" in channel.name or "güvenlik" in channel.name:
                         embed = discord.Embed(
-                            title="🚨 İZİNSİZ YÖNETİCİ ENGellENDİ",
+                            title="🚨 İZİNSİZ YÖNETİCİ ENGELLENDİ",
                             description=f"**{after}** adlı kullanıcıya izinsiz Yönetici yetkisi verildiği için yetki geri alındı.",
                             color=discord.Color.red()
                         )
@@ -224,6 +224,39 @@ async def uyar(interaction: discord.Interaction, member: discord.Member, sebep: 
     embed = discord.Embed(title="⚠️ Uyarı", description=ceza_mesaji, color=discord.Color.orange())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
+# ==========================================
+# DÜZELTİLEN /MUTE KOMUTU
+# ==========================================
+@bot.tree.command(name="mute", description="Kullanıcıya süre, sebep ve DM bildirimiyle zaman aşımı uygular.")
+async def mute(interaction: discord.Interaction, member: discord.Member, dakika: int, sebep: str):
+    if not whitelist_kontrol(interaction):
+        await interaction.response.send_message("Bu komutu kullanmak için Whitelist yetkiniz yok!", ephemeral=True)
+        return
+
+    durum_suresi = timedelta(minutes=dakika)
+    try:
+        await member.timeout(durum_suresi, reason=sebep)
+        
+        # Kullanıcıya DM ile bildirim gönderme
+        try:
+            dm_embed = discord.Embed(title="🔇 Susturuldunuz (Mute)", color=discord.Color.red())
+            dm_embed.add_field(name="Sunucu", value=interaction.guild.name, inline=False)
+            dm_embed.add_field(name="Süre", value=f"{dakika} dakika", inline=False)
+            dm_embed.add_field(name="Sebep", value=sebep, inline=False)
+            dm_embed.set_footer(text=f"İşlemi Yapan Yetkili: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+            await member.send(embed=dm_embed)
+        except Exception:
+            pass
+
+        embed = discord.Embed(title="🔇 Kullanıcı Susturuldu", color=discord.Color.orange())
+        embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
+        embed.add_field(name="Süre", value=f"{dakika} dakika", inline=False)
+        embed.add_field(name="Sebep", value=sebep, inline=False)
+        embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"Mute atılırken hata oluştu: {e}", ephemeral=True)
+
 @bot.tree.command(name="dm", description="Kullanıcıya DM gönderir.")
 async def dm(interaction: discord.Interaction, member: discord.Member, mesaj: str):
     if not whitelist_kontrol(interaction):
@@ -320,6 +353,5 @@ async def ticket_olustur(interaction: discord.Interaction):
     await interaction.response.send_message("Panel kuruldu.", ephemeral=True)
 
 if __name__ == "__main__":
-    keep_alive() # Web sunucusunu başlatır, Railway'in botu uyutmasını engeller
+    keep_alive()
     bot.run(TOKEN)
-                
