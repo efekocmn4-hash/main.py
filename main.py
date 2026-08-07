@@ -43,7 +43,7 @@ def save_warns(warns):
         for uid, count in warns.items():
             f.write(f"{uid}:{count}\n")
 
-# Rolleri dosyada saklama ve okuma fonksiyonları (Bot yeniden başlasa da silinmez)
+# Rollerin kalıcı olarak saklanması için dosya fonksiyonları
 def get_roles():
     data = {}
     if not os.path.exists(ROLE_FILE): return data
@@ -393,7 +393,7 @@ async def mute(interaction: discord.Interaction, member: discord.Member, dakika:
         await interaction.response.send_message(f"Mute atılırken hata oluştu: {e}", ephemeral=True)
 
 # ==========================================
-# 8. YENİLENEN /dm KOMUTU (Gönderen Yetkili Görünür)
+# 8. /dm KOMUTU (Yetkili İsimli)
 # ==========================================
 @bot.tree.command(name="dm", description="Kullanıcıya yetkili bilgisiyle özel mesaj gönderir.")
 async def dm(interaction: discord.Interaction, member: discord.Member, mesaj: str):
@@ -411,7 +411,7 @@ async def dm(interaction: discord.Interaction, member: discord.Member, mesaj: st
         await interaction.response.send_message("Kullanıcının DM kutusu kapalı olduğu için mesaj gönderilemedi.", ephemeral=True)
 
 # ==========================================
-# 9. YENİ /rolal VE /tümrolleri-geri-ver KOMUTLARI
+# 9. /rolal VE /tümrolleri-geri-ver KOMUTLARI
 # ==========================================
 @bot.tree.command(name="rolal", description="Kullanıcıdan rol alır ve sistem hafızasına kaydeder.")
 async def rolal(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
@@ -436,4 +436,5 @@ async def rolal(interaction: discord.Interaction, member: discord.Member, role: 
 @bot.tree.command(name="tümrolleri-geri-ver", description="Kullanıcıdan daha önce alınan tüm rolleri geri yükler.")
 async def tum_rolleri_geri_ver(interaction: discord.Interaction, member: discord.Member):
     if not whitelist_kontrol(interaction):
-        await interaction.response.s
+        await interaction.response.send_message("Yetkiniz yok!", ephemeral=True)
+  
