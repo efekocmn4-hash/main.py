@@ -174,34 +174,23 @@ bot.run(os.environ['DISCORD_TOKEN'])
 import discord
 from discord import app_commands
 from discord.ext import commands
+import os
 
-# 1. INTENTS (Ticket ve Ban işlemleri için şarttır)
+# 1. INTENTS AYARLARI
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True  # Ticket açarken kullanıcı izinleri için gerekli!
+intents.members = True
 
-class MyBot(commands.Bot):
-    def __init__(self):
-        super().__init__(command_prefix="!", intents=intents)
-
-    async def setup_hook(self):
-        # Bot her açıldığında Ticket butonunu hafızaya geri yükler
-        self.add_view(TicketView())
-
-bot = MyBot()
-
-
-# 2. TICKET BUTONU VE GÖRÜNÜMÜ (Persistent View)
+# 2. TICKET BUTONU VE SİSTEMİ (Persistent View)
 class TicketView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None) # Bot kapansa da butonlar bozulmaz
+        super().__init__(timeout=None)  # Bot yeniden başlasa da butonlar aktif kalır
 
     @discord.ui.button(label="🎫 Destek Bileti Aç", style=discord.ButtonStyle.green, custom_id="open_ticket_btn")
     async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         user = interaction.user
 
-        # Aynı kullanıcının açık ticket'ı var mı kontrol et
         channel_name = f"ticket-{user.name.lower()}"
         existing_channel = discord.utils.get(guild.text_channels, name=channel_name)
         
@@ -209,88 +198,106 @@ class TicketView(discord.ui.View):
             await interaction.response.send_message(f"❌ Zaten açık bir biletiniz var: {existing_channel.mention}", ephemeral=True)
             return
 
-        # Kanal İzinleri Ayarlama
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
 
-        # Ticket Kanalını Oluşturma
         try:
             channel = await guild.create_text_channel(name=channel_name, overwrites=overwrites)
             await interaction.response.send_message(f"✅ Biletiniz oluşturuldu: {channel.mention}", ephemeral=True)
             
             embed = discord.Embed(
                 title="🎫 Destek Bileti",
-                description=f"Merhaba {user.mention}, yetkililer kısa süre içinde sizinle ilgilenecektir.",
+                description=f"Merhaba {user.mention}, yetkililer en kısa sürede ilgilenecektir. Talebinizi yazabilirsiniz.",
                 color=discord.Color.blue()
             )
             await channel.send(embed=embed)
         except discord.Forbidden:
-            await interaction.response.send_message("❌ Botun kanal oluşturma yetkisi yok!", ephemeral=True)
+            await interaction.response.send_message("❌ Botun kanal oluşturma yetkisi yetersiz!", ephemeral=True)
 
 
-# 3. BOT BAŞLADIĞINDA SENKRONİZASYON
+# 3. BOT SINIFI
+class MyBot(commands.Bot):
+    def __init__(self):
+        super().__init__(command_prefix="!", intents=intents)
+
+    async def setup_hook(self):
+        # Persistent butonları hafızaya yükler
+        self.add_view(TicketView())
+
+bot = MyBot()
+
+
 @bot.event
 async def on_ready():
     try:
         synced = await bot.tree.sync()
-        print(f"Bot {bot.user} olarak aktif!")
-        print(f"{len(synced)} adet Slash komutu senkronize edildi.")
+        print(f"✅ Bot {bot.user.name} olarak giriş yaptı!")
+        print(f"⚡ {len(synced)} adet Slash komutu başarıyla senkronize edildi.")
     except Exception as e:
-        print(f"Senkronizasyon hatası: {e}")
+        print(f"❌ Senkronizasyon hatası: {e}")
 
 
-# 4. /tamyasakkaldır SLASH KOMUTU
-@bot.tree.command(name="tamyasakkaldır", description="Bir kullanıcının yasağını ID veya kullanıcı adı ile kaldırır.")
-@app_commands.describe(girdi="Yasağı kaldırılacak kullanıcının ID'si veya Kullanıcı Adı")
+# 4. KOMUT 1: /tam_yasak_kaldir
+@bot.tree.command(name="tam_yasak_kaldir", description="Belirtilen kullanıcının yasağını kaldırır.")
+@app_commands.describe(kullanici="Yasağı kaldırılacak kullanıcının ID'si veya Kullanıcı Adı")
 @app_commands.checks.has_permissions(ban_members=True)
-async def tamyasakkaldir(interaction: discord.Interaction, girdi: str):
-    await interaction.response.defer()  # Zaman aşımını önler
+async def tam_yasak_kaldir(interaction: discord.Interaction, kullanici: str):
+    await interaction.response.defer()
 
     banned_users = [entry async for entry in interaction.guild.bans()]
     target_user = None
 
     for ban_entry in banned_users:
         user = ban_entry.user
-        if girdi in (str(user.id), user.name, f"{user.name}#{user.discriminator}"):
+        if kullanici in (str(user.id), user.name, f"{user.name}#{user.discriminator}"):
             target_user = user
             break
 
     if target_user is None:
-        await interaction.followup.send(f"❌ `{girdi}` banlılar listesinde bulunamadı.")
+        await interaction.followup.send(f"❌ `{kullanici}` adlı kullanıcı banlılar listesinde bulunamadı.")
         return
 
     try:
         await interaction.guild.unban(target_user)
         
-        embed = discord.Embed(
-            title="🔓 Yasak Kaldırıldı",
-            color=discord.Color.green()
-        )
+        embed = discord.Embed(title="🔓 Yasak Kaldırıldı", color=discord.Color.green())
         embed.add_field(name="Kullanıcı", value=f"{target_user.mention} ({target_user.name})", inline=True)
-        embed.add_field(name="Kullanıcı ID", value=f"`{target_user.id}`", inline=True)
+        embed.add_field(name="ID", value=f"`{target_user.id}`", inline=True)
         embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
         embed.set_thumbnail(url=target_user.display_avatar.url)
 
         await interaction.followup.send(embed=embed)
     except discord.Forbidden:
-        await interaction.followup.send("❌ Botun **'Üyeleri Yasakla'** yetkisi eksik veya rol sırası yetersiz.")
+        await interaction.followup.send("❌ Botun bu işlem için yetkisi yetersiz.")
 
 
-# 5. TICKET PANOLARINI KURAN KOMUT
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def ticketkur(ctx):
-    """Kanala Ticket Butonunu Gönderir"""
+# 5. KOMUT 2: /ticket_kur
+@bot.tree.command(name="ticket_kur", description="Etiketlenen veya bulunulan kanala Ticket oluşturma panelini kurar.")
+@app_commands.checks.has_permissions(administrator=True)
+async def ticket_kur(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="Destek Sistemi",
-        description="Destek talebi oluşturmak için aşağıdaki butona tıklayın.",
+        title="🎫 Destek Sistemi",
+        description="Destek talebi oluşturmak için aşağıdaki **'Destek Bileti Aç'** butonuna tıklayın.",
         color=discord.Color.gold()
     )
-    await ctx.send(embed=embed, view=TicketView())
+    await interaction.response.send_message("✅ Ticket paneli kuruldu.", ephemeral=True)
+    await interaction.channel.send(embed=embed, view=TicketView())
 
 
-# BOT TOKEN
-# bot.run("BOT_TOKENINIZ")
+# 6. RENDER MASKELENMİŞ TOKEN OKUMA (RENDER ENVIRONMENT VARIABLES)
+# Render üzerinde maskelediğiniz değişkene hangi ismi verdiyseniz otomatik algılar
+TOKEN = (
+    os.getenv("TOKEN") or 
+    os.getenv("DISCORD_TOKEN") or 
+    os.getenv("BOT_TOKEN") or 
+    os.getenv("MASKED_TOKEN")
+)
+
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("❌ HATA: Render Environment Variables kısmında maskelenmiş bot tokeni bulunamadı!")
+            
