@@ -101,9 +101,8 @@ def save_log_channel(guild_id, channel_id):
         for gid, cid in data.items():
             f.write(f"{gid}:{cid}\n")
 
-# Komut yetki sistemi dosya fonksiyonları
 def get_command_perms():
-    data = {} # {guild_id: {komut_adi: [role_id1, role_id2]}}
+    data = {}
     if not os.path.exists(COMMAND_PERM_FILE): return data
     with open(COMMAND_PERM_FILE, "r") as f:
         for line in f:
@@ -135,11 +134,9 @@ async def send_log(guild, embed):
 whitelist_ids = set()
 
 def whitelist_kontrol(interaction: discord.Interaction) -> bool:
-    # Sunucu sahibi, yönetici veya whitelist'te olanlar temel yetkilidir
     if interaction.user.id == interaction.guild.owner_id or interaction.user.guild_permissions.administrator or interaction.user.id in whitelist_ids:
         return True
     
-    # Ekstra rol bazlı komut yetkisi kontrolü
     perms = get_command_perms()
     guild_perms = perms.get(interaction.guild.id, {})
     cmd_name = interaction.command.name
@@ -186,7 +183,6 @@ async def on_member_update(before, after):
             except Exception:
                 pass
 
-# --- KOMUT YETKİLENDİRME YÖNETİMİ ---
 @bot.tree.command(name="komut-yetki-ekle", description="Bir komutu belirli bir role özel olarak açar.")
 async def komut_yetki_ekle(interaction: discord.Interaction, komut_adi: str, role: discord.Role):
     if interaction.user.id != interaction.guild.owner_id and not interaction.user.guild_permissions.administrator:
@@ -429,4 +425,10 @@ async def rolal(interaction: discord.Interaction, member: discord.Member, role: 
         await interaction.response.send_message("Yetkiniz yok!", ephemeral=True)
         return
     data = get_roles()
-    if me
+    if member.id not in data: data[member.id] = []
+    if role.id not in data[member.id]:
+        data[member.id].append(role.id)
+        save_roles(data)
+    try:
+        await member.remove_roles(role)
+        await interaction.response.send_message(f"**{
