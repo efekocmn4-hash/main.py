@@ -5,18 +5,18 @@ import os
 from collections import defaultdict
 import datetime
 
-# 1. INTENTS AYARLARI
+# 1. INTENTS AYARLARI (Koruma ve Modilasyon İçin Şarttır)
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 intents.moderation = True
 intents.guilds = True
 
-# ⚠️ KENDİ SUNUCUNUZUN ID'SİNİ YAZIN (Komutların anında yüklenmesi için)
+# ⚠️ BURAYA KENDİ SUNUCUNUZUN ID'SİNİ YAZIN (Sayısal olarak)
 GUILD_ID = discord.Object(id=123456789012345678)
 
 # -------------------------------------------------------------
-# 2. TICKET SISTEMI (Persistent View)
+# 2. TICKET SİSTEMİ (Persistent View)
 # -------------------------------------------------------------
 class TicketView(discord.ui.View):
     def __init__(self):
@@ -54,7 +54,7 @@ class TicketView(discord.ui.View):
             await interaction.response.send_message("❌ Botun kanal oluşturma yetkisi yetersiz!", ephemeral=True)
 
 # -------------------------------------------------------------
-# 3. BOT SINIFI VE KORUMA SİSTEMİ
+# 3. KORUMA / SECURITY SİSTEMİ (LİMİTLİ ROL ÇEKME)
 # -------------------------------------------------------------
 class ModerationBot(commands.Bot):
     def __init__(self):
@@ -67,7 +67,7 @@ class ModerationBot(commands.Bot):
 
 bot = ModerationBot()
 
-# Limit Kontrolü (1 Dakikada 10 İşlem Limiti)
+# Limit Kontrolü (1 Dakikada 10 İşlem Limiti Aşıldığında Rol Çekilir)
 async def check_and_punish(entry_user, guild, reason):
     now = datetime.datetime.now(datetime.timezone.utc)
     user_actions = bot.action_limits[entry_user.id]
@@ -116,14 +116,16 @@ async def on_guild_channel_delete(channel):
         await check_and_punish(entry.user, channel.guild, "Seri Kanal Silme")
 
 # -------------------------------------------------------------
-# 4. BOT BAŞLATMA VE SENKRONİZASYON
+# 4. BOT BAŞLATMA & HATA ÖNLEYİCİ SENKRONİZASYON
 # -------------------------------------------------------------
 @bot.event
 async def on_ready():
     try:
+        # Eski çakışan komutları sunucudan tamamen siler
         bot.tree.clear_commands(guild=GUILD_ID)
         await bot.tree.sync(guild=GUILD_ID)
         
+        # Güncel komut listesini doğrudan sunucuya işler
         bot.tree.copy_global_to(guild=GUILD_ID)
         synced = await bot.tree.sync(guild=GUILD_ID)
         
@@ -132,18 +134,26 @@ async def on_ready():
     except Exception as e:
         print(f"❌ Senkronizasyon Hatası: {e}")
 
+# CommandNotFound ve Ağaç Hatalarını Yakalama (Konsol Çökmesini Engeller)
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CommandNotFound):
+        await interaction.response.send_message("❌ Bu komut güncellendi veya önbellekte kalmış. Lütfen komut listenizi yenileyin.", ephemeral=True)
+    else:
+        print(f"⚠️ Komut Çalıştırma Hatası: {error}")
+
 # -------------------------------------------------------------
-# 5. SLASH KOMUTLARI
+# 5. TÜM SLASH KOMUTLARI
 # -------------------------------------------------------------
 
-# 1. /tam_yasak (DM Mesajı + Sunucu Listeleme Özellikli)
+# 1. /tam_yasak (Tüm Sunuculardan Banlama + DM Mesajı + Sunucu Listeleme)
 @bot.tree.command(name="tam_yasak", description="Kullanıcıyı botun bulunduğu tüm sununculardan yasaklar.")
 @app_commands.describe(kullanici="Yasaklanacak kullanıcı", sebep="Yasaklanma sebebi")
 @app_commands.checks.has_permissions(ban_members=True)
 async def tam_yasak(interaction: discord.Interaction, kullanici: discord.User, sebep: str = "Belirtilmedi"):
     await interaction.response.defer()
 
-    # 1. DM Mesajı Gönderme
+    # DM Bilgilendirmesi
     dm_sent = False
     try:
         dm_embed = discord.Embed(
@@ -157,32 +167,27 @@ async def tam_yasak(interaction: discord.Interaction, kullanici: discord.User, s
     except (discord.Forbidden, discord.HTTPException):
         dm_sent = False
 
-    # 2. Tüm Sunucularda Banlama ve Sunucuları Listeleme
     banned_guilds = []
-    failed_guilds = []
-
     for guild in bot.guilds:
         try:
             await guild.ban(kullanici, reason=f"Tam Yasaklama ({interaction.user}): {sebep}")
             banned_guilds.append(guild.name)
         except (discord.Forbidden, discord.HTTPException):
-            failed_guilds.append(guild.name)
+            pass
 
-    # 3. Sonuç Embed'i Oluşturma
     embed = discord.Embed(
         title="🔨 Tam Yasaklama İşlemi Tamamlandı",
         color=discord.Color.red()
     )
     embed.add_field(name="Hedef Kullanıcı", value=f"{kullanici.mention} ({kullanici.name})", inline=False)
-    embed.add_field(name="DM Durumu", value="✅ DM Başarıyla Gönderildi" if dm_sent else "❌ DM Kapalı (Gönderilemedi)", inline=False)
-    embed.add_field(name="Yasaklama Sebebi", value=sebep, inline=False)
+    embed.add_field(name="DM Durumu", value="✅ DM Gönderildi" if dm_sent else "❌ DM Gönderilemedi (Kapalı)", inline=False)
+    embed.add_field(name="Yasaklanma Sebebi", value=sebep, inline=False)
     
-    # Yasaklanan Sunucuların Listesi
     if banned_guilds:
         guilds_str = "\n".join([f"• {g_name}" for g_name in banned_guilds])
         embed.add_field(name=f"✅ Yasaklandığı Sunucular ({len(banned_guilds)})", value=guilds_str, inline=False)
     else:
-        embed.add_field(name="❌ Yasaklandığı Sunucular", value="Hiçbir sunucuda ban yetkisi uygulanamadı.", inline=False)
+        embed.add_field(name="❌ Yasaklandığı Sunucular", value="Hiçbir sunucuda yetki uygulanamadı.", inline=False)
 
     await interaction.followup.send(embed=embed)
 
@@ -214,7 +219,7 @@ async def tam_yasak_kaldir(interaction: discord.Interaction, kullanici: str):
         embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
         await interaction.followup.send(embed=embed)
     except discord.Forbidden:
-        await interaction.followup.send("❌ Botun bu işlem için yetkisi yetersiz.")
+        await interaction.followup.send("❌ Botun yetkisi yetersiz.")
 
 
 # 3. /ticket_kur
@@ -230,19 +235,19 @@ async def ticket_kur(interaction: discord.Interaction):
     await interaction.channel.send(embed=embed, view=TicketView())
 
 
-# 4. /rol_ver
+# 4. /rol_ver (ErensiBot Özelliği)
 @bot.tree.command(name="rol_ver", description="Belirtilen kullanıcıya rol verir.")
 @app_commands.describe(kullanici="Rol verilecek üye", rol="Verilecek rol")
 @app_commands.checks.has_permissions(manage_roles=True)
 async def rol_ver(interaction: discord.Interaction, kullanici: discord.Member, rol: discord.Role):
     try:
         await kullanici.add_roles(rol)
-        await interaction.response.send_message(f"✅ {kullanici.mention} kullanıcısına {rol.mention} rolü verildi.")
+        await interaction.response.send_message(f"✅ {kullanici.mention} kullanıcısına {rol.mention} rolü başarıyla verildi.")
     except discord.Forbidden:
-        await interaction.response.send_message("❌ Bu rolü vermek için botun yetkisi yetersiz.", ephemeral=True)
+        await interaction.response.send_message("❌ Botun rol sırası yetersiz.", ephemeral=True)
 
 
-# 5. /rol_al
+# 5. /rol_al (ErensiBot Özelliği)
 @bot.tree.command(name="rol_al", description="Belirtilen kullanıcıdan rol alır.")
 @app_commands.describe(kullanici="Rol alınacak üye", rol="Alınacak rol")
 @app_commands.checks.has_permissions(manage_roles=True)
@@ -251,10 +256,10 @@ async def rol_al(interaction: discord.Interaction, kullanici: discord.Member, ro
         await kullanici.remove_roles(rol)
         await interaction.response.send_message(f"✅ {kullanici.mention} kullanıcısından {rol.mention} rolü alındı.")
     except discord.Forbidden:
-        await interaction.response.send_message("❌ Bu rolü almak için botun yetkisi yetersiz.", ephemeral=True)
+        await interaction.response.send_message("❌ Botun rol sırası yetersiz.", ephemeral=True)
 
 
-# 6. /rolleri_geri_ver
+# 6. /rolleri_geri_ver (Güvenlik Tarafından Çekilen Rolleri İade Eder)
 @bot.tree.command(name="rolleri_geri_ver", description="Güvenlik sistemi tarafından tüm rolleri alınan yetkiliye rollerini iade eder.")
 @app_commands.describe(kullanici="Rolleri geri verilecek üye")
 @app_commands.checks.has_permissions(administrator=True)
@@ -268,12 +273,24 @@ async def rolleri_geri_ver(interaction: discord.Interaction, kullanici: discord.
     try:
         await kullanici.add_roles(*roles_to_restore, reason="Yönetici Tarafından Rol İadesi Yapıldı")
         del bot.backup_roles[kullanici.id]
-        await interaction.response.send_message(f"✅ {kullanici.mention} kullanıcısının çekilen **tüm rolleri geri verildi!**")
+        await interaction.response.send_message(f"✅ {kullanici.mention} kullanıcısının çekilen **tüm rolleri başarıyla geri verildi!**")
     except discord.Forbidden:
-        await interaction.response.send_message("❌ Yetki hatası. Botun rolünün üst sırada olduğundan emin olun.", ephemeral=True)
+        await interaction.response.send_message("❌ Yetki hatası. Botun en üst role sahip olduğundan emin olun.", ephemeral=True)
+
+
+# 7. /dm (Direkt Mesaj Gönderme)
+@bot.tree.command(name="dm", description="Belirtilen kullanıcıya özel mesaj (DM) gönderir.")
+@app_commands.describe(kullanici="Mesaj gönderilecek kullanıcı", mesaj="Gönderilecek mesaj")
+@app_commands.checks.has_permissions(administrator=True)
+async def dm(interaction: discord.Interaction, kullanici: discord.User, mesaj: str):
+    try:
+        await kullanici.send(f"📩 **Yetkili Mesajı:** {mesaj}")
+        await interaction.response.send_message(f"✅ {kullanici.mention} kullanıcısına DM gönderildi.", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.response.send_message("❌ Kullanıcının DM kutusu kapalı olduğu için mesaj gönderilemedi.", ephemeral=True)
 
 # -------------------------------------------------------------
-# 6. RENDER TOKEN YÜKLEYİCİ
+# 6. RENDER GİZLİ (MASKELENMİŞ) TOKEN OKUYUCU
 # -------------------------------------------------------------
 TOKEN = (
     os.getenv("TOKEN") or 
@@ -286,4 +303,4 @@ if TOKEN:
     bot.run(TOKEN)
 else:
     print("❌ HATA: Render ortam değişkenlerinde (Environment Variables) token bulunamadı!")
-            
+    
