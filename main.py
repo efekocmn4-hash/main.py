@@ -7,7 +7,7 @@ from datetime import timedelta
 from flask import Flask
 from threading import Thread
 
-# --- Railway İçin Web Sunucusu (Botun Kapanmasını Önler) ---
+# --- Railway İçin Web Sunucusu ---
 app = Flask('')
 
 @app.route('/')
@@ -20,7 +20,6 @@ def run():
 def keep_alive():
     t = Thread(target=run)
     t.start()
-# ---------------------------------------------------------
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
 
@@ -45,7 +44,7 @@ def get_banlilar():
 def save_banlilar(banlilar):
     with open(BAN_FILE, "w") as f:
         for uid in banlilar:
-            f.write(f"{uid}\n")
+            f.write(str(uid) + "\n")
 
 def get_warns():
     warns = {}
@@ -60,7 +59,7 @@ def get_warns():
 def save_warns(warns):
     with open(WARN_FILE, "w") as f:
         for uid, count in warns.items():
-            f.write(f"{uid}:{count}\n")
+            f.write(str(uid) + ":" + str(count) + "\n")
 
 def get_roles():
     data = {}
@@ -77,7 +76,7 @@ def get_roles():
 def save_roles(data):
     with open(ROLE_FILE, "w") as f:
         for uid, rids in data.items():
-            f.write(f"{uid}:" + ",".join(map(str, rids)) + "\n")
+            f.write(str(uid) + ":" + ",".join(map(str, rids)) + "\n")
 
 def get_log_channel(guild_id):
     if not os.path.exists(LOG_FILE): return None
@@ -99,7 +98,7 @@ def save_log_channel(guild_id, channel_id):
     data[guild_id] = channel_id
     with open(LOG_FILE, "w") as f:
         for gid, cid in data.items():
-            f.write(f"{gid}:{cid}\n")
+            f.write(str(gid) + ":" + str(cid) + "\n")
 
 def get_command_perms():
     data = {}
@@ -119,7 +118,7 @@ def save_command_perms(data):
     with open(COMMAND_PERM_FILE, "w") as f:
         for gid, cmds in data.items():
             for cmd, rids in cmds.items():
-                f.write(f"{gid}:{cmd}:" + ",".join(map(str, rids)) + "\n")
+                f.write(str(gid) + ":" + cmd + ":" + ",".join(map(str, rids)) + "\n")
 
 async def send_log(guild, embed):
     cid = get_log_channel(guild.id)
@@ -153,17 +152,17 @@ def whitelist_kontrol(interaction: discord.Interaction) -> bool:
 async def on_ready():
     try:
         synced = await bot.tree.sync()
-        print(f"{len(synced)} komut senkronize edildi.")
+        print("Komutlar senkronize edildi.")
     except Exception as e:
-        print(f"Senkronizasyon hatası: {e}")
-    print(f"Bot Hazır: {bot.user}")
+        print("Senkronizasyon hatasi:", e)
+    print("Bot Hazir:", bot.user)
 
 @bot.event
 async def on_member_unban(guild, user):
     banlilar = get_banlilar()
     if str(user.id) in banlilar:
         try:
-            await guild.ban(user, reason="Kalıcı Güvenlik: Bot banı manuel kaldırılamaz!")
+            await guild.ban(user, reason="Kalici Guvenlik")
         except Exception:
             pass
 
@@ -173,20 +172,20 @@ async def on_member_update(before, after):
         new_role = next((role for role in after.roles if role not in before.roles), None)
         if new_role and new_role.permissions.administrator and not after.guild_owner:
             try:
-                await after.edit(roles=[r for r in before.roles], reason="GÜVENLİK: İzinsiz Yönetici yetkisi engellendi!")
+                await after.edit(roles=[r for r in before.roles], reason="Izinsiz Yonetici Engellendi")
                 embed = discord.Embed(
-                    title="🚨 İZİNSİZ YÖNETİCİ ENGELLENDİ",
-                    description=f"**{after}** adlı kullanıcıya izinsiz Yönetici yetkisi verildiği için yetki geri alındı.",
+                    title="IZINSIZ YONETICI ENGELLENDI",
+                    description="Kullaniciya izinsiz Yonetici yetkisi verildiği için yetki geri alindi.",
                     color=discord.Color.red()
                 )
                 await send_log(after.guild, embed)
             except Exception:
                 pass
 
-@bot.tree.command(name="komut-yetki-ekle", description="Bir komutu belirli bir role özel olarak açar.")
+@bot.tree.command(name="komut-yetki-ekle", description="Bir komutu belirli bir role acar.")
 async def komut_yetki_ekle(interaction: discord.Interaction, komut_adi: str, role: discord.Role):
     if interaction.user.id != interaction.guild.owner_id and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("Bu komutu sadece sunucu sahibi veya yöneticiler kullanabilir.", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
     
     perms = get_command_perms()
@@ -197,14 +196,14 @@ async def komut_yetki_ekle(interaction: discord.Interaction, komut_adi: str, rol
     if role.id not in perms[gid][komut_adi]:
         perms[gid][komut_adi].append(role.id)
         save_command_perms(perms)
-        await interaction.response.send_message(f"Başarılı! Artık **{role.name}** rolündekiler `/{komut_adi}` komutunu kullanabilecek.", ephemeral=True)
+        await interaction.response.send_message("Rol basariyla yetkilendirildi.", ephemeral=True)
     else:
-        await interaction.response.send_message("Bu rol zaten bu komut için yetkilendirilmiş.", ephemeral=True)
+        await interaction.response.send_message("Bu rol zaten yetkili.", ephemeral=True)
 
-@bot.tree.command(name="komut-yetki-kaldir", description="Bir komut için rol yetkisini kaldırır.")
+@bot.tree.command(name="komut-yetki-kaldir", description="Rol yetkisini kaldirir.")
 async def komut_yetki_kaldir(interaction: discord.Interaction, komut_adi: str, role: discord.Role):
     if interaction.user.id != interaction.guild.owner_id and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("Bu komutu sadece sunucu sahibi veya yöneticiler kullanabilir.", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
     
     perms = get_command_perms()
@@ -213,76 +212,74 @@ async def komut_yetki_kaldir(interaction: discord.Interaction, komut_adi: str, r
         perms[gid][komut_adi].remove(role.id)
         if not perms[gid][komut_adi]: del perms[gid][komut_adi]
         save_command_perms(perms)
-        await interaction.response.send_message(f"**{role.name}** rolünün `/{komut_adi}` üzerindeki yetkisi kaldırıldı.", ephemeral=True)
+        await interaction.response.send_message("Rol yetkisi kaldirildi.", ephemeral=True)
     else:
-        await interaction.response.send_message("Bu rol için böyle bir komut yetkisi bulunamadı.", ephemeral=True)
+        await interaction.response.send_message("Yetki bulunamadi.", ephemeral=True)
 
-@bot.tree.command(name="komut-yetki-liste", description="Komutlara özel verilmiş rol yetkilerini listeler.")
+@bot.tree.command(name="komut-yetki-liste", description="Yetkileri listeler.")
 async def komut_yetki_liste(interaction: discord.Interaction):
     perms = get_command_perms()
     gid = interaction.guild.id
     if gid not in perms or not perms[gid]:
-        await interaction.response.send_message("Bu sunucuda özel olarak yetkilendirilmiş bir komut bulunmuyor.", ephemeral=True)
+        await interaction.response.send_message("Yetkilendirilmis komut yok.", ephemeral=True)
         return
     
-    embed = discord.Embed(title="🛡️ Komut Yetki Listesi", color=discord.Color.blue())
+    embed = discord.Embed(title="Komut Yetki Listesi", color=discord.Color.blue())
     for cmd, rids in perms[gid].items():
-        role_mentions = ", ".join([f"<@&{rid}>" for rid in rids])
-        embed.add_field(name=f"/{cmd}", value=role_mentions, inline=False)
+        role_mentions = ", ".join(["<@&" + str(rid) + ">" for rid in rids])
+        embed.add_field(name="/" + cmd, value=role_mentions, inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="log-kanal-ayarla", description="Log bildirimlerinin gönderileceği kanalı ayarlar.")
+@bot.tree.command(name="log-kanal-ayarla", description="Log kanalini ayarlar.")
 async def log_kanal_ayarla(interaction: discord.Interaction, kanal: discord.TextChannel):
     if interaction.user.id != interaction.guild.owner_id and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("Bu komutu sadece sunucu sahibi veya yöneticiler kullanabilir.", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
     save_log_channel(interaction.guild.id, kanal.id)
-    embed = discord.Embed(title="⚙️ Log Kanalı Güncellendi", description=f"Loglar başarıyla {kanal.mention} kanalına yönlendirildi.", color=discord.Color.green())
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message("Log kanali güncellendi.", ephemeral=True)
 
-@bot.tree.command(name="whitelist-ekle", description="Beyaz listeye kullanıcı ekler.")
+@bot.tree.command(name="whitelist-ekle", description="Beyaz listeye ekler.")
 async def whitelist_ekle(interaction: discord.Interaction, member: discord.Member):
     if interaction.user.id != interaction.guild.owner_id and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("Bu komutu sadece sunucu sahibi veya yöneticiler kullanabilir.", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
     whitelist_ids.add(member.id)
-    await interaction.response.send_message(f"Başarıyla **{member.mention}** beyaz listeye eklendi.", ephemeral=True)
+    await interaction.response.send_message("Beyaz listeye eklendi.", ephemeral=True)
 
-@bot.tree.command(name="whitelist-cikar", description="Beyaz listeden kullanıcı çıkarır.")
+@bot.tree.command(name="whitelist-cikar", description="Beyaz listeden cikarir.")
 async def whitelist_cikar(interaction: discord.Interaction, member: discord.Member):
     if interaction.user.id != interaction.guild.owner_id and not interaction.user.guild_permissions.administrator:
-        await interaction.response.send_message("Bu komutu sadece sunucu sahibi veya yöneticiler kullanabilir.", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
     if member.id in whitelist_ids:
         whitelist_ids.remove(member.id)
-        await interaction.response.send_message(f"**{member.mention}** beyaz listeden çıkarıldı.", ephemeral=True)
+        await interaction.response.send_message("Beyaz listeden cikarildi.", ephemeral=True)
     else:
-        await interaction.response.send_message("Bu kullanıcı zaten listede yok.", ephemeral=True)
+        await interaction.response.send_message("Zaten listede yok.", ephemeral=True)
 
-@bot.tree.command(name="whitelist-liste", description="Beyaz listedeki kişileri gösterir.")
+@bot.tree.command(name="whitelist-liste", description="Beyaz listeyi gösterir.")
 async def whitelist_liste(interaction: discord.Interaction):
     if not whitelist_ids:
-        await interaction.response.send_message("Beyaz listede henüz kimse yok.", ephemeral=True)
+        await interaction.response.send_message("Liste bos.", ephemeral=True)
         return
-    uyeler = ", ".join([f"<@{uid}>" for uid in whitelist_ids])
-    embed = discord.Embed(title="📋 Bot Whitelist Listesi", description=uyeler, color=discord.Color.blue())
+    uyeler = ", ".join(["<@" + str(uid) + ">" for uid in whitelist_ids])
+    embed = discord.Embed(title="Whitelist Listesi", description=uyeler, color=discord.Color.blue())
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="duyuru", description="Duyuru atar (Seçime 'tümroller' yazarak tüm rolleri etiketleyebilirsin).")
+@bot.tree.command(name="duyuru", description="Duyuru gonderir.")
 async def duyuru(interaction: discord.Interaction, kanal: discord.TextChannel, secim: str, baslik: str, mesaj: str):
     if not whitelist_kontrol(interaction):
-        await interaction.response.send_message("Bu komutu kullanmak için yetkiniz yok!", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
 
-    embed = discord.Embed(title=f"📢 {baslik}", description=mesaj, color=discord.Color.gold())
-    embed.set_footer(text=f"Yetkili: {interaction.user}", icon_url=interaction.user.display_avatar.url)
-
+    embed = discord.Embed(title=baslik, description=mesaj, color=discord.Color.gold())
+    
     ping_metni = ""
     if secim.lower() == "@everyone":
         ping_metni = "@everyone"
     elif secim.lower() == "@here":
         ping_metni = "@here"
-    elif secim.lower() == "tümroller" or secim.lower() == "tumroller":
+    elif secim.lower() in ["tümroller", "tumroller"]:
         ping_metni = " ".join([r.mention for r in interaction.guild.roles if r != interaction.guild.default_role])
     else:
         role = discord.utils.get(interaction.guild.roles, name=secim)
@@ -295,40 +292,29 @@ async def duyuru(interaction: discord.Interaction, kanal: discord.TextChannel, s
 
     try:
         await kanal.send(content=ping_metni, embed=embed)
-        await interaction.response.send_message(f"Duyuru başarıyla {kanal.mention} kanalına gönderildi.", ephemeral=True)
-        
-        log_embed = discord.Embed(title="📢 Duyuru Gönderildi", color=discord.Color.blue())
-        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
-        log_embed.add_field(name="Kanal", value=kanal.mention, inline=False)
-        await send_log(interaction.guild, log_embed)
+        await interaction.response.send_message("Duyuru gonderildi.", ephemeral=True)
     except Exception as e:
-        await interaction.response.send_message(f"Duyuru gönderilirken hata oluştu: {e}", ephemeral=True)
+        await interaction.response.send_message("Hata olustu: " + str(e), ephemeral=True)
 
 @bot.tree.command(name="sil", description="Mesaj siler.")
 async def sil(interaction: discord.Interaction, adet: int):
     if not whitelist_kontrol(interaction):
-        await interaction.response.send_message("Yetkiniz yok!", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
     if adet < 1:
-        await interaction.response.send_message("1'den büyük sayı girin.", ephemeral=True)
+        await interaction.response.send_message("1'den büyük sayi girin.", ephemeral=True)
         return
     await interaction.response.defer(ephemeral=True)
     try:
         silinenler = await interaction.channel.purge(limit=adet)
-        await interaction.followup.send(f"**{len(silinenler)}** mesaj silindi.", ephemeral=True)
-        
-        log_embed = discord.Embed(title="🗑️ Mesaj Silindi", color=discord.Color.dark_orange())
-        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
-        log_embed.add_field(name="Kanal", value=interaction.channel.mention, inline=False)
-        log_embed.add_field(name="Silinen Adet", value=str(len(silinenler)), inline=False)
-        await send_log(interaction.guild, log_embed)
+        await interaction.followup.send(str(len(silinenler)) + " mesaj silindi.", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"Hata: {e}", ephemeral=True)
+        await interaction.followup.send("Hata: " + str(e), ephemeral=True)
 
-@bot.tree.command(name="uyar", description="Kullanıcıyı uyarır (3. uyarıda mute).")
+@bot.tree.command(name="uyar", description="Kullaniciyi uyarir.")
 async def uyar(interaction: discord.Interaction, member: discord.Member, sebep: str):
     if not whitelist_kontrol(interaction):
-        await interaction.response.send_message("Yetkiniz yok!", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
 
     warns = get_warns()
@@ -337,92 +323,47 @@ async def uyar(interaction: discord.Interaction, member: discord.Member, sebep: 
     current_warns = warns[user_id]
     save_warns(warns)
 
-    try:
-        dm_embed = discord.Embed(title="⚠️ Uyarı Aldınız!", description=f"**{interaction.guild.name}** sunucusunda uyarıldınız.", color=discord.Color.yellow())
-        dm_embed.add_field(name="Sebep", value=sebep, inline=False)
-        dm_embed.add_field(name="Toplam Uyarı", value=str(current_warns), inline=False)
-        await member.send(embed=dm_embed)
-    except Exception:
-        pass
-
-    ceza_mesaji = f"{member.mention} uyarıldı. (Toplam: {current_warns})"
+    ceza_mesaji = "Uyarildiniz. Toplam uyari: " + str(current_warns)
     if current_warns >= 3:
         try:
-            await member.timeout(timedelta(minutes=30), reason="3 uyarı sınırı")
+            await member.timeout(timedelta(minutes=30), reason="3 uyari siniri")
             warns[user_id] = 0
             save_warns(warns)
-            ceza_mesaji += "\n🚨 3 uyarıyı aştığı için **30 dakika** mute yedi!"
-        except Exception as e:
-            ceza_mesaji += f"\n(Mute atılamadı: {e})"
-
-    embed = discord.Embed(title="⚠️ Uyarı", description=ceza_mesaji, color=discord.Color.orange())
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-    
-    log_embed = discord.Embed(title="⚠️ Kullanıcı Uyarıldı", color=discord.Color.yellow())
-    log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
-    log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
-    log_embed.add_field(name="Sebep", value=sebep, inline=False)
-    log_embed.add_field(name="Toplam Uyarı", value=str(current_warns), inline=False)
-    await send_log(interaction.guild, log_embed)
-
-@bot.tree.command(name="mute", description="Kullanıcıya süre, sebep ve DM bildirimiyle zaman aşımı uygular.")
-async def mute(interaction: discord.Interaction, member: discord.Member, dakika: int, sebep: str):
-    if not whitelist_kontrol(interaction):
-        await interaction.response.send_message("Bu komutu kullanmak için yetkiniz yok!", ephemeral=True)
-        return
-
-    durum_suresi = timedelta(minutes=dakika)
-    try:
-        await member.timeout(durum_suresi, reason=sebep)
-        
-        try:
-            dm_embed = discord.Embed(title="🔇 Susturuldunuz (Mute)", color=discord.Color.red())
-            dm_embed.add_field(name="Sunucu", value=interaction.guild.name, inline=False)
-            dm_embed.add_field(name="Süre", value=f"{dakika} dakika", inline=False)
-            dm_embed.add_field(name="Sebep", value=sebep, inline=False)
-            dm_embed.set_footer(text=f"İşlemi Yapan Yetkili: {interaction.user}", icon_url=interaction.user.display_avatar.url)
-            await member.send(embed=dm_embed)
+            ceza_mesaji += " ve 30 dakika mute yediniz."
         except Exception:
             pass
 
-        embed = discord.Embed(title="🔇 Kullanıcı Susturuldu", color=discord.Color.orange())
-        embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
-        embed.add_field(name="Süre", value=f"{dakika} dakika", inline=False)
-        embed.add_field(name="Sebep", value=sebep, inline=False)
-        embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-        
-        log_embed = discord.Embed(title="🔇 Mute Atıldı", color=discord.Color.red())
-        log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
-        log_embed.add_field(name="Süre", value=f"{dakika} dakika", inline=False)
-        log_embed.add_field(name="Sebep", value=sebep, inline=False)
-        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
-        await send_log(interaction.guild, log_embed)
-    except Exception as e:
-        await interaction.response.send_message(f"Mute atılırken hata oluştu: {e}", ephemeral=True)
+    embed = discord.Embed(title="Uyari", description=ceza_mesaji, color=discord.Color.orange())
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
-@bot.tree.command(name="dm", description="Kullanıcıya DM gönderir.")
+@bot.tree.command(name="mute", description="Kullaniciyi susturur.")
+async def mute(interaction: discord.Interaction, member: discord.Member, dakika: int, sebep: str):
+    if not whitelist_kontrol(interaction):
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
+        return
+
+    try:
+        await member.timeout(timedelta(minutes=dakika), reason=sebep)
+        await interaction.response.send_message("Kullanici susturuldu.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message("Hata: " + str(e), ephemeral=True)
+
+@bot.tree.command(name="dm", description="DM gonderir.")
 async def dm(interaction: discord.Interaction, member: discord.Member, mesaj: str):
     if not whitelist_kontrol(interaction):
-        await interaction.response.send_message("Yetkiniz yok!", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
     try:
-        embed = discord.Embed(title="📬 Yetkili Mesajı", description=mesaj, color=discord.Color.orange())
-        embed.set_footer(text=f"Gönderen: {interaction.user}", icon_url=interaction.user.display_avatar.url)
+        embed = discord.Embed(title="Yetkili Mesaji", description=mesaj, color=discord.Color.orange())
         await member.send(embed=embed)
-        await interaction.response.send_message(f"**{member}** kişisine DM gönderildi.", ephemeral=True)
-        
-        log_embed = discord.Embed(title="📬 Yetkili DM Gönderdi", color=discord.Color.blue())
-        log_embed.add_field(name="Alıcı", value=member.mention, inline=False)
-        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
-        await send_log(interaction.guild, log_embed)
+        await interaction.response.send_message("DM gonderildi.", ephemeral=True)
     except Exception:
-        await interaction.response.send_message("Kullanıcının DM kutusu kapalı.", ephemeral=True)
+        await interaction.response.send_message("DM kutusu kapali.", ephemeral=True)
 
-@bot.tree.command(name="rolal", description="Kullanıcıdan rol alır ve kaydeder.")
+@bot.tree.command(name="rolal", description="Rol alir.")
 async def rolal(interaction: discord.Interaction, member: discord.Member, role: discord.Role):
     if not whitelist_kontrol(interaction):
-        await interaction.response.send_message("Yetkiniz yok!", ephemeral=True)
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
         return
     data = get_roles()
     if member.id not in data: data[member.id] = []
@@ -431,4 +372,71 @@ async def rolal(interaction: discord.Interaction, member: discord.Member, role: 
         save_roles(data)
     try:
         await member.remove_roles(role)
-        await interaction.response.send_message(f"**{
+        await interaction.response.send_message("Rol alindi ve kaydedildi.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message("Hata: " + str(e), ephemeral=True)
+
+@bot.tree.command(name="tümrolleri-geri-ver", description="Rolleri geri verir.")
+async def tum_rolleri_geri_ver(interaction: discord.Interaction, member: discord.Member):
+    if not whitelist_kontrol(interaction):
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
+        return
+    data = get_roles()
+    if member.id not in data or not data[member.id]:
+        await interaction.response.send_message("Kayitli rol yok.", ephemeral=True)
+        return
+    roles_to_add = [interaction.guild.get_role(rid) for rid in data[member.id] if interaction.guild.get_role(rid)]
+    if not roles_to_add:
+        await interaction.response.send_message("Gecerli rol bulunamadi.", ephemeral=True)
+        return
+    try:
+        await member.add_roles(*roles_to_add)
+        data[member.id] = []
+        save_roles(data)
+        await interaction.response.send_message("Roller geri verildi.", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message("Hata: " + str(e), ephemeral=True)
+
+class TicketView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Destek Aç", style=discord.ButtonStyle.green, custom_id="create_ticket")
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        category = discord.utils.get(guild.categories, name="DESTEK TALEPLERI")
+        if not category:
+            category = await guild.create_category("DESTEK TALEPLERI")
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        channel = await guild.create_text_channel("destek-" + interaction.user.name, category=category, overwrites=overwrites)
+        embed = discord.Embed(title="Destek", description="Yetkililer ilgilenecek.", color=discord.Color.gold())
+        await channel.send(interaction.user.mention, embed=embed, view=TicketActionView())
+        await interaction.response.send_message("Kanal acildi: " + channel.mention, ephemeral=True)
+
+class TicketActionView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Kapat", style=discord.ButtonStyle.red, custom_id="close_ticket")
+    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("Kanal kapatiliyor...")
+        await asyncio.sleep(3)
+        await interaction.channel.delete()
+
+@bot.tree.command(name="ticket-olustur", description="Panel kurar.")
+async def ticket_olustur(interaction: discord.Interaction):
+    if not whitelist_kontrol(interaction):
+        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
+        return
+    embed = discord.Embed(title="Destek Sistemi", description="Talep açmak için tiklayin.", color=discord.Color.blurple())
+    await interaction.channel.send(embed=embed, view=TicketView())
+    await interaction.response.send_message("Panel kuruldu.", ephemeral=True)
+
+if __name__ == "__main__":
+    keep_alive()
+    bot.run(TOKEN)
+        
