@@ -171,382 +171,126 @@ import os
 import os
 
 bot.run(os.environ['DISCORD_TOKEN'])
-
 import discord
 from discord import app_commands
-
-@bot.tree.command(name="tam-yasak-kaldır", description="Belirtilen kullanıcının sunucudaki veya tüm Kara sunucularındaki yasağını kaldırır.")
-@app_commands.checks.has_permissions(ban_members=True)
-@app_commands.describe(
-    kullanici_id="Yasağı kaldırılacak kullanıcının Discord ID'si",
-    secenek="Yasağın kaldırılacağı kapsamı seçin",
-    sebep="Yasağın kaldırılma sebebi"
-)
-@app_commands.choices(secenek=[
-    app_commands.Choice(name="Bu Sunucuda Yasağı Kaldır", value="bu_sunucu"),
-    app_commands.Choice(name="Tüm Kara Sunucularından Yasak Kaldır", value="tum_kara")
-])
-async def tam_yasak_kaldir(interaction: discord.Interaction, kullanici_id: str, secenek: app_commands.Choice[str], sebep: str = "Sebep belirtilmedi"):
-    await interaction.response.defer(ephemeral=False)
-    
-    # ID kontrolü
-    try:
-        user_id = int(kullanici_id)
-        user = await bot.fetch_user(user_id)
-    except ValueError:
-        await interaction.followup.send("Geçersiz bir Kullanıcı ID'si girdiniz.")
-        return
-    except discord.NotFound:
-        await interaction.followup.send("Bu ID'ye sahip bir Discord kullanıcısı bulunamadı.")
-        return
-
-    basarili_sunucular = []
-    hatali_sunucular = []
-
-    # 1. Bu Sunucuda Yasağı Kaldır
-    if secenek.value == "bu_sunucu":
-        try:
-            await interaction.guild.unban(user, reason=f"{interaction.user} tarafından: {sebep}")
-            basarili_sunucular.append(interaction.guild.name)
-        except discord.NotFound:
-            await interaction.followup.send("Bu kullanıcı mevcut sunucuda banlı değil.")
-            return
-        except discord.Forbidden:
-            await interaction.followup.send("Bu sunucuda üyelerin yasağını kaldırmak için yeterli yetkim yok.")
-            return
-
-    # 2. Tüm Kara Sunucularından Yasak Kaldır
-    elif secenek.value == "tum_kara":
-        for guild in bot.guilds:
-            try:
-                await guild.unban(user, reason=f"[TÜM KARA UNBAN] {interaction.user} tarafından: {sebep}")
-                basarili_sunucular.append(guild.name)
-            except (discord.NotFound, discord.Forbidden):
-                # Kullanıcı o sunucuda banlı değilse veya botun yetkisi yoksa atlar
-                continue
-
-    if not basarili_sunucular:
-        await interaction.followup.send("Hiçbir sunucuda aktif ban bulunamadı veya yetki yetersiz.")
-        return
-
-    # Sunucu içi bildirim embed'i
-    embed = discord.Embed(
-        title="Yasak Kaldırma İşlemi Tamamlandı",
-        color=discord.Color.green()
-    )
-    embed.add_field(name="Kullanıcı", value=f"{user.name} (`{user.id}`)", inline=False)
-    embed.add_field(name="İşlemi Yapan Yetkili", value=f"{interaction.user.mention} ({interaction.user})", inline=False)
-    embed.add_field(name="Kapsam", value=secenek.name, inline=False)
-    embed.add_field(name="Kaldırılan Sunucular", value=", ".join(basarili_sunucular), inline=False)
-    embed.add_field(name="Sebep", value=sebep, inline=False)
-    
-    await interaction.followup.send(embed=embed)
-
-    # Kullanıcıya DM Bildirimi (Yetkili Bilgisiyle)
-    try:
-        dm_embed = discord.Embed(
-            title="Yasağınız Kaldırıldı",
-            description=f"**{secenek.name}** kapsamında yasağınız kaldırılmıştır.",
-            color=discord.Color.green()
-        )
-        dm_embed.add_field(name="Yasağı Kaldıran Yetkili", value=f"{interaction.user} ({interaction.user.display_name})", inline=False)
-        dm_embed.add_field(name="Sebep", value=sebep, inline=False)
-        dm_embed.set_footer(text="Aramıza tekrar hoş geldiniz.")
-        
-        await user.send(embed=dm_embed)
-    except discord.Forbidden:
-        await interaction.channel.send("Kullanıcının DM kutusu kapalı olduğu için özel bilgilendirme mesajı iletilemedi.")
-
-# Yetki hatası yakalama
-@tam_yasak_kaldir.error
-async def tam_yasak_kaldir_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.MissingPermissions):
-        await interaction.response.send_message("Bu komutu kullanmak için **Üyeleri Yasakla** yetkisine sahip olmalısın.", ephemeral=True)
-import os
-import asyncio
-import discord
 from discord.ext import commands
-from discord import app_commands, ui
-from flask import Flask
-from threading import Thread
 
-# --- WEBSERVER (Render & UptimeRobot İçin) ---
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot 7/24 Aktif!"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-Thread(target=run).start()
-
-# --- BOT KURULUMU ---
+# 1. INTENTS (Ticket ve Ban işlemleri için şarttır)
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True
+intents.members = True  # Ticket açarken kullanıcı izinleri için gerekli!
 
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-# --- TICKET BİLEŞENLERİ (GÖRÜNÜMLER) ---
-
-# 1. Ticketi Kapatma Butonu
-class CloseTicketView(ui.View):
+class MyBot(commands.Bot):
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__(command_prefix="!", intents=intents)
 
-    @ui.button(label="Ticketi Kapat", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="close_ticket_btn")
-    async def close_ticket(self, interaction: discord.Interaction, button: ui.Button):
-        await interaction.response.send_message("Destek talebi 5 saniye içinde kapatılıyor...", ephemeral=False)
-        await asyncio.sleep(5)
-        await interaction.channel.delete()
+    async def setup_hook(self):
+        # Bot her açıldığında Ticket butonunu hafızaya geri yükler
+        self.add_view(TicketView())
 
-# 2. Ticket Kategori Seçim Menüsü
-class TicketSelect(ui.Select):
+bot = MyBot()
+
+
+# 2. TICKET BUTONU VE GÖRÜNÜMÜ (Persistent View)
+class TicketView(discord.ui.View):
     def __init__(self):
-        options = [
-            discord.SelectOption(label="Genel Destek", value="Genel Destek", emoji="❓"),
-            discord.SelectOption(label="Şikayet Bildirimi", value="Şikayet Bildirimi", emoji="🛡️"),
-            discord.SelectOption(label="Teknik Destek", value="Teknik Destek", emoji="💻")
-        ]
-        super().__init__(placeholder="Lütfen bir destek konusu seçin...", options=options, custom_id="ticket_select_menu")
+        super().__init__(timeout=None) # Bot kapansa da butonlar bozulmaz
 
-    async def callback(self, interaction: discord.Interaction):
+    @discord.ui.button(label="🎫 Destek Bileti Aç", style=discord.ButtonStyle.green, custom_id="open_ticket_btn")
+    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         user = interaction.user
-        secilen_kategori = self.values[0]
 
-        # Kanal adı formatı
-        channel_name = f"ticket-{user.name}".lower().replace(" ", "-")
-
-        # Zaten açık kanalı var mı kontrolü
-        existing_channel = discord.utils.get(guild.channels, name=channel_name)
+        # Aynı kullanıcının açık ticket'ı var mı kontrol et
+        channel_name = f"ticket-{user.name.lower()}"
+        existing_channel = discord.utils.get(guild.text_channels, name=channel_name)
+        
         if existing_channel:
-            await interaction.response.send_message(f"Zaten açık bir destek talebiniz var: {existing_channel.mention}", ephemeral=True)
+            await interaction.response.send_message(f"❌ Zaten açık bir biletiniz var: {existing_channel.mention}", ephemeral=True)
             return
 
-        # Gizlilik İzinleri (Sadece Kullanıcı ve Bot Görebilir)
+        # Kanal İzinleri Ayarlama
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            user: discord.PermissionOverwrite(read_messages=True, send_messages=True, attach_files=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+            user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
 
-        # Gizli Kanal Oluşturma
-        channel = await guild.create_text_channel(
-            name=channel_name,
-            overwrites=overwrites,
-            reason=f"Ticket açıldı: {user}"
-        )
+        # Ticket Kanalını Oluşturma
+        try:
+            channel = await guild.create_text_channel(name=channel_name, overwrites=overwrites)
+            await interaction.response.send_message(f"✅ Biletiniz oluşturuldu: {channel.mention}", ephemeral=True)
+            
+            embed = discord.Embed(
+                title="🎫 Destek Bileti",
+                description=f"Merhaba {user.mention}, yetkililer kısa süre içinde sizinle ilgilenecektir.",
+                color=discord.Color.blue()
+            )
+            await channel.send(embed=embed)
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ Botun kanal oluşturma yetkisi yok!", ephemeral=True)
 
-        await interaction.response.send_message(f"Destek kanalınız oluşturuldu: {channel.mention}", ephemeral=True)
 
-        # Şablon Mesajı ve @here Etiketi
-        template_text = (
-            f"@here\n\n"
-            f"**İsmim:**\n"
-            f"**Şikayetim:**\n"
-            f"**Kanıt:**\n\n"
-            f"*Lütfen yukarıdaki şablonu eksiksiz doldurup yetkililerin ilgilenmesini bekleyin.*"
-        )
-
-        embed = discord.Embed(
-            title=f"Destek Talebi — {secilen_kategori}",
-            description=template_text,
-            color=discord.Color.blue()
-        )
-        embed.set_footer(text=f"Talep Sahibi: {user.name}", icon_url=user.display_avatar.url)
-
-        # Kanala mesajı at ve Kapat butonunu ekle
-        await channel.send(content="@here", embed=embed, view=CloseTicketView())
-
-# 3. Ticket Ana Paneli View'ı
-class TicketPanelView(ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-        self.add_item(TicketSelect())
-
-# --- ON_READY EVENT (BOT AÇILIŞI) ---
+# 3. BOT BAŞLADIĞINDA SENKRONİZASYON
 @bot.event
 async def on_ready():
-    # Buton ve menülerin bot yeniden başlasa da çalışmasını sağlama
-    bot.add_view(TicketPanelView())
-    bot.add_view(CloseTicketView())
-
-    # Slash komutlarını senkronize et
     try:
         synced = await bot.tree.sync()
+        print(f"Bot {bot.user} olarak aktif!")
         print(f"{len(synced)} adet Slash komutu senkronize edildi.")
     except Exception as e:
-        print(f"Slash senkronizasyon hatası: {e}")
+        print(f"Senkronizasyon hatası: {e}")
 
-    print(f"Bot Çevrimiçi: {bot.user}")
 
-# --- SLASH KOMUTU: /ticket kur ---
-ticket_group = app_commands.Group(name="ticket", description="Ticket sistemi yönetim komutları")
+# 4. /tamyasakkaldır SLASH KOMUTU
+@bot.tree.command(name="tamyasakkaldır", description="Bir kullanıcının yasağını ID veya kullanıcı adı ile kaldırır.")
+@app_commands.describe(girdi="Yasağı kaldırılacak kullanıcının ID'si veya Kullanıcı Adı")
+@app_commands.checks.has_permissions(ban_members=True)
+async def tamyasakkaldir(interaction: discord.Interaction, girdi: str):
+    await interaction.response.defer()  # Zaman aşımını önler
 
-@ticket_group.command(name="kur", description="Kanalda destek talebi oluşturma panelini kurar.")
-@app_commands.checks.has_permissions(administrator=True)
-async def ticket_kur(interaction: discord.Interaction):
+    banned_users = [entry async for entry in interaction.guild.bans()]
+    target_user = None
+
+    for ban_entry in banned_users:
+        user = ban_entry.user
+        if girdi in (str(user.id), user.name, f"{user.name}#{user.discriminator}"):
+            target_user = user
+            break
+
+    if target_user is None:
+        await interaction.followup.send(f"❌ `{girdi}` banlılar listesinde bulunamadı.")
+        return
+
+    try:
+        await interaction.guild.unban(target_user)
+        
+        embed = discord.Embed(
+            title="🔓 Yasak Kaldırıldı",
+            color=discord.Color.green()
+        )
+        embed.add_field(name="Kullanıcı", value=f"{target_user.mention} ({target_user.name})", inline=True)
+        embed.add_field(name="Kullanıcı ID", value=f"`{target_user.id}`", inline=True)
+        embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+        embed.set_thumbnail(url=target_user.display_avatar.url)
+
+        await interaction.followup.send(embed=embed)
+    except discord.Forbidden:
+        await interaction.followup.send("❌ Botun **'Üyeleri Yasakla'** yetkisi eksik veya rol sırası yetersiz.")
+
+
+# 5. TICKET PANOLARINI KURAN KOMUT
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def ticketkur(ctx):
+    """Kanala Ticket Butonunu Gönderir"""
     embed = discord.Embed(
         title="Destek Sistemi",
-        description="Destek talebi oluşturmak ve yetkili ekibimizle görüşmek için aşağıdan bir konu seçin.",
-        color=discord.Color.green()
+        description="Destek talebi oluşturmak için aşağıdaki butona tıklayın.",
+        color=discord.Color.gold()
     )
-    await interaction.channel.send(embed=embed, view=TicketPanelView())
-    await interaction.response.send_message("Ticket paneli başarıyla kuruldu!", ephemeral=True)
-
-bot.tree.add_command(ticket_group)
-
-# --- SLASH KOMUTU: /tam-yasak-kaldır ---
-@bot.tree.command(name="tam-yasak-kaldır", description="Belirtilen kullanıcının sunucudaki veya tüm Kara sunucularındaki yasağını kaldırır.")
-@app_commands.checks.has_permissions(ban_members=True)
-@app_commands.describe(
-    kullanici_id="Yasağı kaldırılacak kullanıcının Discord ID'si",
-    secenek="Yasağın kaldırılacağı kapsamı seçin",
-    sebep="Yasağın kaldırılma sebebi"
-)
-@app_commands.choices(secenek=[
-    app_commands.Choice(name="Bu Sunucuda Yasağı Kaldır", value="bu_sunucu"),
-    app_commands.Choice(name="Tüm Kara Sunucularından Yasak Kaldır", value="tum_kara")
-])
-async def tam_yasak_kaldir(interaction: discord.Interaction, kullanici_id: str, secenek: app_commands.Choice[str], sebep: str = "Sebep belirtilmedi"):
-    await interaction.response.defer(ephemeral=False)
-
-    try:
-        user_id = int(kullanici_id)
-        user = await bot.fetch_user(user_id)
-    except ValueError:
-        await interaction.followup.send("Geçersiz Kullanıcı ID'si.")
-        return
-    except discord.NotFound:
-        await interaction.followup.send("Kullanıcı bulunamadı.")
-        return
-
-    basarili_sunucular = []
-
-    if secenek.value == "bu_sunucu":
-        try:
-            await interaction.guild.unban(user, reason=f"{interaction.user} tarafından: {sebep}")
-            basarili_sunucular.append(interaction.guild.name)
-        except (discord.NotFound, discord.Forbidden):
-            await interaction.followup.send("Bu kullanıcı banlı değil veya yasağı kaldırma yetkisi yok.")
-            return
-
-    elif secenek.value == "tum_kara":
-        for guild in bot.guilds:
-            try:
-                await guild.unban(user, reason=f"[TÜM KARA UNBAN] {interaction.user} tarafından: {sebep}")
-                basarili_sunucular.append(guild.name)
-            except (discord.NotFound, discord.Forbidden):
-                continue
-
-    if not basarili_sunucular:
-        await interaction.followup.send("Aktif ban bulunamadı.")
-        return
-
-    embed = discord.Embed(title="Yasak Kaldırıldı", color=discord.Color.green())
-    embed.add_field(name="Kullanıcı", value=f"{user.name} (`{user.id}`)", inline=False)
-    embed.add_field(name="Yetkili", value=f"{interaction.user.mention}", inline=False)
-    embed.add_field(name="Kapsam", value=secenek.name, inline=False)
-    embed.add_field(name="Sunucular", value=", ".join(basarili_sunucular), inline=False)
-    embed.add_field(name="Sebep", value=sebep, inline=False)
-
-    await interaction.followup.send(embed=embed)
-
-    try:
-        dm_embed = discord.Embed(
-            title="Yasağınız Kaldırıldı",
-            description=f"**{secenek.name}** kapsamında yasağınız kaldırılmıştır.",
-            color=discord.Color.green()
-        )
-        dm_embed.add_field(name="Yasağı Kaldıran Yetkili", value=f"{interaction.user} ({interaction.user.display_name})", inline=False)
-        dm_embed.add_field(name="Sebep", value=sebep, inline=False)
-        await user.send(embed=dm_embed)
-    except discord.Forbidden:
-        pass
-
-# --- BOTU BAŞLAT ---
-token = os.environ.get('DISCORD_TOKEN')
-bot.run(token)
-# --- SLASH KOMUTU: /tam-yasak-kaldır ---
-@bot.tree.command(name="tam-yasak-kaldır", description="Kullanıcı yasağını sunucuda veya tüm Kara sunucularında kaldırıp DM atar.")
-@app_commands.checks.has_permissions(ban_members=True)
-@app_commands.describe(
-    kullanici_id="Yasağı kaldırılacak kullanıcının Discord ID'si",
-    secenek="Yasağın kaldırılacağı kapsamı seçin",
-    sebep="Yasağın kaldırılma sebebi"
-)
-@app_commands.choices(secenek=[
-    app_commands.Choice(name="Bu Sunucuda Yasağı Kaldır", value="bu_sunucu"),
-    app_commands.Choice(name="Tüm Kara Sunucularından Yasak Kaldır", value="tum_kara")
-])
-async def tam_yasak_kaldir(interaction: discord.Interaction, kullanici_id: str, secenek: app_commands.Choice[str], sebep: str = "Sebep belirtilmedi"):
-    await interaction.response.defer(ephemeral=False)
-
-    try:
-        user_id = int(kullanici_id)
-        user = await bot.fetch_user(user_id)
-    except ValueError:
-        await interaction.followup.send("Geçersiz Kullanıcı ID'si girdiniz.")
-        return
-    except discord.NotFound:
-        await interaction.followup.send("Belirtilen ID'ye sahip bir kullanıcı bulunamadı.")
-        return
-
-    basarili_sunucular = []
-
-    # 1. Seçenek: Bu Sunucuda Yasağı Kaldır
-    if secenek.value == "bu_sunucu":
-        try:
-            await interaction.guild.unban(user, reason=f"{interaction.user} tarafından: {sebep}")
-            basarili_sunucular.append(interaction.guild.name)
-        except discord.NotFound:
-            await interaction.followup.send("Bu kullanıcı bu sunucuda banlı değil.")
-            return
-        except discord.Forbidden:
-            await interaction.followup.send("Bu sunucuda ban kaldırmak için botun yeterli yetkisi yok.")
-            return
-
-    # 2. Seçenek: Tüm Kara Sunucularından Yasak Kaldır
-    elif secenek.value == "tum_kara":
-        for guild in bot.guilds:
-            try:
-                await guild.unban(user, reason=f"[TÜM KARA UNBAN] {interaction.user} tarafından: {sebep}")
-                basarili_sunucular.append(guild.name)
-            except (discord.NotFound, discord.Forbidden):
-                continue
-
-    if not basarili_sunucular:
-        await interaction.followup.send("Hiçbir sunucuda aktif ban bulunamadı.")
-        return
-
-    # Sunucu Bilgilendirme Embed Mesajı
-    embed = discord.Embed(title="Yasak Kaldırma İşlemi Tamamlandı", color=discord.Color.green())
-    embed.add_field(name="Kullanıcı", value=f"{user.name} (`{user.id}`)", inline=False)
-    embed.add_field(name="İşlemi Yapan Yetkili", value=f"{interaction.user.mention} ({interaction.user})", inline=False)
-    embed.add_field(name="Kapsam", value=secenek.name, inline=False)
-    embed.add_field(name="Kaldırılan Sunucular", value=", ".join(basarili_sunucular), inline=False)
-    embed.add_field(name="Sebep", value=sebep, inline=False)
-
-    await interaction.followup.send(embed=embed)
-
-    # Kullanıcıya Gönderilen DM Bildirimi (Yetkili Bilgisi Dahil)
-    try:
-        dm_embed = discord.Embed(
-            title="Yasağınız Kaldırıldı",
-            description=f"**{secenek.name}** kapsamında yasağınız kaldırılmıştır.",
-            color=discord.Color.green()
-        )
-        dm_embed.add_field(name="Yasağı Kaldıran Yetkili", value=f"{interaction.user} ({interaction.user.display_name})", inline=False)
-        dm_embed.add_field(name="Sebep", value=sebep, inline=False)
-        dm_embed.set_footer(text="Aramıza tekrar hoş geldiniz.")
-        await user.send(embed=dm_embed)
-    except discord.Forbidden:
-        await interaction.channel.send("Kullanıcının DM kutusu kapalı olduğu için özel bilgilendirme mesajı gönderilemedi.")
-        
+    await ctx.send(embed=embed, view=TicketView())
 
 
-        
-
+# BOT TOKEN
+# bot.run("BOT_TOKENINIZ")
