@@ -2,6 +2,7 @@ import os, discord
 from discord.ext import commands
 from discord import app_commands
 from datetime import timedelta
+import asyncio
 from flask import Flask
 from threading import Thread
 
@@ -85,18 +86,8 @@ async def on_member_unban(guild, user):
     if str(user.id) in oku("banlilar.txt") or str(user.id) in oku("global_banlilar.txt"):
         try:
             await guild.ban(user, reason="Kara liste koruması!")
-            await send_log(guild, discord.Embed(title="Kara Liste Ban Koruması", description=f"{user} tekrar banlandı!", color=discord.Color.red()))
+            await send_log(guild, discord.Embed(title="Kara Liste Ban Koruması", description=f"{user} manuel olarak banı açıldığı için tekrar banlandı!", color=discord.Color.red()))
         except: pass
-
-@bot.event
-async def on_member_update(before, after):
-    if len(after.roles) > len(before.roles):
-        new_role = next((r for r in after.roles if r not in before.roles), None)
-        if new_role and new_role.permissions.administrator and not after.guild_owner:
-            try:
-                await after.edit(roles=before.roles, reason="İZİNSİZ YÖNETİCİ ENGELLENDİ")
-                await send_log(after.guild, discord.Embed(title="İZİNSİZ YÖNETİCİ ENGELLENDİ", description=f"{after} adlı kullanıcıdan yetki alındı.", color=discord.Color.red()))
-            except: pass
 
 @bot.tree.command(name="tamyasakla", description="Kullanıcıyı bu sunucudan veya tüm sunuculardan yasaklar.")
 @app_commands.choices(secenek=[
@@ -109,7 +100,7 @@ async def tamyasakla(i: discord.Interaction, member: discord.Member, secenek: ap
     
     if val == "sunucu":
         b = oku("banlilar.txt")
-        b.add(member.id)
+        b.add(str(member.id))
         yaz("banlilar.txt", b)
         try: await i.guild.ban(member, reason="Sunucu Tamyasaklama")
         except: pass
@@ -118,7 +109,7 @@ async def tamyasakla(i: discord.Interaction, member: discord.Member, secenek: ap
     
     elif val == "global":
         gb = oku("global_banlilar.txt")
-        gb.add(member.id)
+        gb.add(str(member.id))
         yaz("global_banlilar.txt", gb)
         count = 0
         for guild in bot.guilds:
@@ -143,8 +134,8 @@ async def tamyasakkaldir(i: discord.Interaction, user_id: str, secenek: app_comm
 
     if val == "sunucu":
         b = oku("banlilar.txt")
-        if uid in b or str(uid) in b:
-            b.discard(uid); b.discard(str(uid))
+        if str(uid) in b:
+            b.discard(str(uid))
             yaz("banlilar.txt", b)
             try: await i.guild.unban(discord.Object(id=uid), reason="Sunucu Tamyasak Kaldırma")
             except: pass
@@ -154,8 +145,8 @@ async def tamyasakkaldir(i: discord.Interaction, user_id: str, secenek: app_comm
 
     elif val == "global":
         gb = oku("global_banlilar.txt")
-        if uid in gb or str(uid) in gb:
-            gb.discard(uid); gb.discard(str(uid))
+        if str(uid) in gb:
+            gb.discard(str(uid))
             yaz("global_banlilar.txt", gb)
             count = 0
             for guild in bot.guilds:
@@ -166,36 +157,6 @@ async def tamyasakkaldir(i: discord.Interaction, user_id: str, secenek: app_comm
             await i.response.send_message(f"Kullanıcının global yasağı kaldırıldı ({count} sunucuda işlem denendi).", ephemeral=True)
             await send_log(i.guild, discord.Embed(title="Global Tamyasak Kaldırıldı", color=discord.Color.green()).add_field(name="User ID", value=str(uid)))
         else: await i.response.send_message("Bu kullanıcı global kara listede bulunamadı.", ephemeral=True)
-
-@bot.tree.command(name="komut-yetki-ekle", description="Komut yetkilendir.")
-async def komut_yetki_ekle(i: discord.Interaction, komut_adi: str, role: discord.Role):
-    if i.user.id != i.guild.owner_id and not i.user.guild_permissions.administrator: return await i.response.send_message("Yetkiniz yok.", ephemeral=True)
-    p = oku("komutyetkileri.txt")
-    p.setdefault(i.guild.id, {}).setdefault(komut_adi, [])
-    if role.id not in p[i.guild.id][komut_adi]:
-        p[i.guild.id][komut_adi].append(role.id)
-        yaz("komutyetkileri.txt", p)
-        await i.response.send_message("Yetkilendirildi.", ephemeral=True)
-    else: await i.response.send_message("Zaten yetkili.", ephemeral=True)
-
-@bot.tree.command(name="komut-yetki-kaldir", description="Rol yetkisini kaldır.")
-async def komut_yetki_kaldir(i: discord.Interaction, komut_adi: str, role: discord.Role):
-    if i.user.id != i.guild.owner_id and not i.user.guild_permissions.administrator: return await i.response.send_message("Yetkiniz yok.", ephemeral=True)
-    p = oku("komutyetkileri.txt")
-    if i.guild.id in p and komut_adi in p[i.guild.id] and role.id in p[i.guild.id][komut_adi]:
-        p[i.guild.id][komut_adi].remove(role.id)
-        if not p[i.guild.id][komut_adi]: del p[i.guild.id][komut_adi]
-        yaz("komutyetkileri.txt", p)
-        await i.response.send_message("Yetki kaldırıldı.", ephemeral=True)
-    else: await i.response.send_message("Bulunamadı.", ephemeral=True)
-
-@bot.tree.command(name="komut-yetki-liste", description="Yetkileri listele.")
-async def komut_yetki_liste(i: discord.Interaction):
-    p = oku("komutyetkileri.txt").get(i.guild.id, {})
-    if not p: return await i.response.send_message("Yetkilendirilmiş komut yok.", ephemeral=True)
-    embed = discord.Embed(title="Komut Yetki Listesi", color=discord.Color.blue())
-    for cmd, rids in p.items(): embed.add_field(name=f"/{cmd}", value=", ".join([f"<@&{rid}>" for rid in rids]), inline=False)
-    await i.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="log-kanal-ayarla", description="Log kanalını ayarla.")
 async def log_kanal_ayarla(i: discord.Interaction, kanal: discord.TextChannel):
@@ -337,4 +298,4 @@ async def ticket_olustur(i: discord.Interaction):
     await i.response.send_message("Panel kuruldu.", ephemeral=True)
 
 bot.run(TOKEN)
-                                                 
+        
