@@ -163,6 +163,8 @@ async def on_member_unban(guild, user):
     if str(user.id) in [str(u) for u in banlilar]:
         try:
             await guild.ban(user, reason="Kara liste koruması: Bot banı kaldırılamaz!")
+            embed = discord.Embed(title="🚨 Kara Liste Ban Koruması", description=str(user) + " adlı kullanıcı kara listede olduğu için tekrar banlandı!", color=discord.Color.red())
+            await send_log(guild, embed)
         except Exception:
             pass
 
@@ -174,8 +176,8 @@ async def on_member_update(before, after):
             try:
                 await after.edit(roles=[r for r in before.roles], reason="IZINSIZ YONETICI ENGELLENDI")
                 embed = discord.Embed(
-                    title="IZINSIZ YONETICI ENGELLENDI",
-                    description="Kullaniciya izinsiz Yonetici yetkisi verildiği için yetki geri alindi.",
+                    title="🚨 İZİNSİZ YÖNETİCİ ENGELLENDİ",
+                    description=str(after) + " adlı kullanıcıya izinsiz Yönetici yetkisi verildiği için yetki geri alındı.",
                     color=discord.Color.red()
                 )
                 await send_log(after.guild, embed)
@@ -192,6 +194,11 @@ async def tamyasak_ekle(interaction: discord.Interaction, member: discord.Member
     banlilar.add(member.id)
     save_banlilar(banlilar)
     await interaction.response.send_message(member.name + " kara listeye eklendi.", ephemeral=True)
+    
+    log_embed = discord.Embed(title="🚫 Kara Listeye Eklendi", color=discord.Color.dark_red())
+    log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
+    log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+    await send_log(interaction.guild, log_embed)
 
 @bot.tree.command(name="tamyasak-kaldir", description="Bir kullanıcıyı kara listeden çıkarır.")
 async def tamyasak_kaldir(interaction: discord.Interaction, member: discord.Member):
@@ -205,6 +212,11 @@ async def tamyasak_kaldir(interaction: discord.Interaction, member: discord.Memb
         banlilar.discard(str(member.id))
         save_banlilar(banlilar)
         await interaction.response.send_message(member.name + " kara listeden çıkarıldı.", ephemeral=True)
+        
+        log_embed = discord.Embed(title="✅ Kara Listeden Çıkarıldı", color=discord.Color.green())
+        log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
+        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+        await send_log(interaction.guild, log_embed)
     else:
         await interaction.response.send_message("Bu kişi zaten listede yok.", ephemeral=True)
 
@@ -263,6 +275,9 @@ async def log_kanal_ayarla(interaction: discord.Interaction, kanal: discord.Text
         return
     save_log_channel(interaction.guild.id, kanal.id)
     await interaction.response.send_message("Log kanali güncellendi.", ephemeral=True)
+    
+    log_embed = discord.Embed(title="⚙️ Log Kanalı Ayarlandı", description="Log kanalı " + kanal.mention + " olarak seçildi.", color=discord.Color.green())
+    await send_log(interaction.guild, log_embed)
 
 @bot.tree.command(name="whitelist-ekle", description="Beyaz listeye ekler.")
 async def whitelist_ekle(interaction: discord.Interaction, member: discord.Member):
@@ -319,6 +334,11 @@ async def duyuru(interaction: discord.Interaction, kanal: discord.TextChannel, s
     try:
         await kanal.send(content=ping_metni, embed=embed)
         await interaction.response.send_message("Duyuru gonderildi.", ephemeral=True)
+        
+        log_embed = discord.Embed(title="📢 Duyuru Gönderildi", color=discord.Color.blue())
+        log_embed.add_field(name="Kanal", value=kanal.mention, inline=False)
+        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+        await send_log(interaction.guild, log_embed)
     except Exception as e:
         await interaction.response.send_message("Hata olustu: " + str(e), ephemeral=True)
 
@@ -334,6 +354,12 @@ async def sil(interaction: discord.Interaction, adet: int):
     try:
         silinenler = await interaction.channel.purge(limit=adet)
         await interaction.followup.send(str(len(silinenler)) + " mesaj silindi.", ephemeral=True)
+        
+        log_embed = discord.Embed(title="🗑️ Mesaj Silindi", color=discord.Color.dark_orange())
+        log_embed.add_field(name="Kanal", value=interaction.channel.mention, inline=False)
+        log_embed.add_field(name="Silinen Adet", value=str(len(silinenler)), inline=False)
+        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+        await send_log(interaction.guild, log_embed)
     except Exception as e:
         await interaction.followup.send("Hata: " + str(e), ephemeral=True)
 
@@ -361,6 +387,13 @@ async def uyar(interaction: discord.Interaction, member: discord.Member, sebep: 
 
     embed = discord.Embed(title="Uyari", description=ceza_mesaji, color=discord.Color.orange())
     await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    log_embed = discord.Embed(title="⚠️ Kullanıcı Uyarıldı", color=discord.Color.yellow())
+    log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
+    log_embed.add_field(name="Sebep", value=sebep, inline=False)
+    log_embed.add_field(name="Toplam Uyarı", value=str(current_warns), inline=False)
+    log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+    await send_log(interaction.guild, log_embed)
 
 @bot.tree.command(name="mute", description="Kullaniciyi susturur.")
 async def mute(interaction: discord.Interaction, member: discord.Member, dakika: int, sebep: str):
@@ -371,6 +404,13 @@ async def mute(interaction: discord.Interaction, member: discord.Member, dakika:
     try:
         await member.timeout(timedelta(minutes=dakika), reason=sebep)
         await interaction.response.send_message("Kullanici susturuldu.", ephemeral=True)
+        
+        log_embed = discord.Embed(title="🔇 Mute Atıldı", color=discord.Color.red())
+        log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
+        log_embed.add_field(name="Süre", value=str(dakika) + " dakika", inline=False)
+        log_embed.add_field(name="Sebep", value=sebep, inline=False)
+        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+        await send_log(interaction.guild, log_embed)
     except Exception as e:
         await interaction.response.send_message("Hata: " + str(e), ephemeral=True)
 
@@ -383,6 +423,11 @@ async def dm(interaction: discord.Interaction, member: discord.Member, mesaj: st
         embed = discord.Embed(title="Yetkili Mesaji", description=mesaj, color=discord.Color.orange())
         await member.send(embed=embed)
         await interaction.response.send_message("DM gonderildi.", ephemeral=True)
+        
+        log_embed = discord.Embed(title="📬 Yetkili DM Gönderdi", color=discord.Color.blue())
+        log_embed.add_field(name="Alıcı", value=member.mention, inline=False)
+        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+        await send_log(interaction.guild, log_embed)
     except Exception:
         await interaction.response.send_message("DM kutusu kapali.", ephemeral=True)
 
@@ -399,70 +444,9 @@ async def rolal(interaction: discord.Interaction, member: discord.Member, role: 
     try:
         await member.remove_roles(role)
         await interaction.response.send_message("Rol alindi ve kaydedildi.", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message("Hata: " + str(e), ephemeral=True)
-
-@bot.tree.command(name="tümrolleri-geri-ver", description="Rolleri geri verir.")
-async def tum_rolleri_geri_ver(interaction: discord.Interaction, member: discord.Member):
-    if not whitelist_kontrol(interaction):
-        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
-        return
-    data = get_roles()
-    if member.id not in data or not data[member.id]:
-        await interaction.response.send_message("Kayitli rol yok.", ephemeral=True)
-        return
-    roles_to_add = [interaction.guild.get_role(rid) for rid in data[member.id] if interaction.guild.get_role(rid)]
-    if not roles_to_add:
-        await interaction.response.send_message("Gecerli rol bulunamadi.", ephemeral=True)
-        return
-    try:
-        await member.add_roles(*roles_to_add)
-        data[member.id] = []
-        save_roles(data)
-        await interaction.response.send_message("Roller geri verildi.", ephemeral=True)
-    except Exception as e:
-        await interaction.response.send_message("Hata: " + str(e), ephemeral=True)
-
-class TicketView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Destek Aç", style=discord.ButtonStyle.green, custom_id="create_ticket")
-    async def create_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild = interaction.guild
-        category = discord.utils.get(guild.categories, name="DESTEK TALEPLERI")
-        if not category:
-            category = await guild.create_category("DESTEK TALEPLERI")
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        }
-        channel = await guild.create_text_channel("destek-" + interaction.user.name, category=category, overwrites=overwrites)
-        embed = discord.Embed(title="Destek", description="Yetkililer ilgilenecek.", color=discord.Color.gold())
-        await channel.send(interaction.user.mention, embed=embed, view=TicketActionView())
-        await interaction.response.send_message("Kanal acildi: " + channel.mention, ephemeral=True)
-
-class TicketActionView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Kapat", style=discord.ButtonStyle.red, custom_id="close_ticket")
-    async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("Kanal kapatiliyor...")
-        await asyncio.sleep(3)
-        await interaction.channel.delete()
-
-@bot.tree.command(name="ticket-olustur", description="Panel kurar.")
-async def ticket_olustur(interaction: discord.Interaction):
-    if not whitelist_kontrol(interaction):
-        await interaction.response.send_message("Yetkiniz yok.", ephemeral=True)
-        return
-    embed = discord.Embed(title="Destek Sistemi", description="Talep açmak için tiklayin.", color=discord.Color.blurple())
-    await interaction.channel.send(embed=embed, view=TicketView())
-    await interaction.response.send_message("Panel kuruldu.", ephemeral=True)
-
-if __name__ == "__main__":
-    keep_alive()
-    bot.run(TOKEN)
-    
+        
+        log_embed = discord.Embed(title="🛡️ Kullanıcıdan Rol Alındı", color=discord.Color.dark_purple())
+        log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
+        log_embed.add_field(name="Alınan Rol", value=role.name, inline=False)
+        log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
+        await send_log(inte
