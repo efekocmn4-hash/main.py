@@ -98,6 +98,20 @@ async def tamyasakla(i: discord.Interaction, member: discord.Member, secenek: ap
     if i.user.id != i.guild.owner_id: return await i.response.send_message("Bu komutu sadece sunucu sahibi kullanabilir!", ephemeral=True)
     val = secenek.value
     
+    hedef_sunucular = []
+    if val == "sunucu":
+        hedef_sunucular = [i.guild.name]
+    elif val == "global":
+        for guild in bot.guilds:
+            if guild.get_member(member.id) is not None or guild.id == i.guild.id:
+                hedef_sunucular.append(guild.name)
+
+    try:
+        sunucu_listesi_str_dm = "\n".join([f"-{s}" for s in hedef_sunucular]) if hedef_sunucular else f"-{i.guild.name}"
+        dm_metin = f"{i.user.name} Tarafından Aşağıdaki sunuculardan yasaklandınız:\n{sunucu_listesi_str_dm}\n\nSebep:\n{sebep}"
+        await member.send(dm_metin)
+    except: pass
+
     etkilenen_sunucular = []
     if val == "sunucu":
         b = oku("banlilar.txt")
@@ -107,8 +121,6 @@ async def tamyasakla(i: discord.Interaction, member: discord.Member, secenek: ap
             await i.guild.ban(member, reason=sebep)
             etkilenen_sunucular.append(i.guild.name)
         except: pass
-        await i.response.send_message(f"{member.name} bu sunucuda kara listeye eklenip banlandı.", ephemeral=True)
-        await send_log(i.guild, discord.Embed(title="Sunucu Tamyasak Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Sebep", value=sebep))
     
     elif val == "global":
         gb = oku("global_banlilar.txt")
@@ -119,14 +131,12 @@ async def tamyasakla(i: discord.Interaction, member: discord.Member, secenek: ap
                 await guild.ban(member, reason=sebep)
                 etkilenen_sunucular.append(guild.name)
             except: pass
-        await i.response.send_message(f"{member.name} tüm ortak sunuculardan (global) yasaklandı ({len(etkilenen_sunucular)} sunucu).", ephemeral=True)
-        await send_log(i.guild, discord.Embed(title="Global Tamyasak Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Sebep", value=sebep).add_field(name="Etkilenen Sunucu Sayısı", value=str(len(etkilenen_sunucular))))
 
-    try:
-        sunucu_listesi_str = "\n".join([f"-{s}" for s in etkilenen_sunucular])
-        dm_metin = f"{i.user.name} Tarafından Aşağıdaki sunuculardan yasaklandınız:\n{sunucu_listesi_str}\n\nSebep:\n{sebep}"
-        await member.send(dm_metin)
-    except: pass
+    sunucu_listesi_str = "\n".join([f"-{s}" for s in etkilenen_sunucular]) if etkilenen_sunucular else f"-{i.guild.name}"
+    kanal_mesaj = f"{member.name} Kullanıcısı Aşağıdaki sunuculardan yasaklandı:\n{sunucu_listesi_str}"
+    
+    await i.response.send_message(kanal_mesaj)
+    await send_log(i.guild, discord.Embed(title="Tamyasak Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Sebep", value=sebep).add_field(name="Etkilenen Sunucu Sayısı", value=str(len(etkilenen_sunucular))))
 
 @bot.tree.command(name="tamyasakkaldir", description="Yasağı bu sunucudan veya tüm sunuculardan kaldırır.")
 @app_commands.choices(secenek=[
@@ -180,7 +190,6 @@ async def log_kanal_ayarla(i: discord.Interaction, kanal: discord.TextChannel):
     await i.response.send_message("Log kanalı güncellendi.", ephemeral=True)
     await send_log(i.guild, discord.Embed(title="Log Kanalı Ayarlandı", description=f"{kanal.mention}", color=discord.Color.green()))
 
-# Whitelist Komutları Ana Grup Altına Toplandı
 whitelist_group = app_commands.Group(name="whitelist", description="Beyaz liste yönetim komutları")
 
 @whitelist_group.command(name="ekle", description="Beyaz listeye kullanıcı ekler.")
@@ -328,4 +337,4 @@ async def ticket_olustur(i: discord.Interaction):
     await i.response.send_message("Panel kuruldu.", ephemeral=True)
 
 bot.run(TOKEN)
-    
+                                                                 
