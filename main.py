@@ -163,7 +163,7 @@ async def on_member_unban(guild, user):
     if str(user.id) in [str(u) for u in banlilar]:
         try:
             await guild.ban(user, reason="Kara liste koruması: Bot banı kaldırılamaz!")
-            embed = discord.Embed(title="🚨 Kara Liste Ban Koruması", description=str(user) + " adlı kullanıcı kara listede olduğu için tekrar banlandı!", color=discord.Color.red())
+            embed = discord.Embed(title="Kara Liste Ban Koruması", description=str(user) + " adlı kullanıcı kara listede olduğu için tekrar banlandı!", color=discord.Color.red())
             await send_log(guild, embed)
         except Exception:
             pass
@@ -176,7 +176,7 @@ async def on_member_update(before, after):
             try:
                 await after.edit(roles=[r for r in before.roles], reason="IZINSIZ YONETICI ENGELLENDI")
                 embed = discord.Embed(
-                    title="🚨 İZİNSİZ YÖNETİCİ ENGELLENDİ",
+                    title="İZİNSİZ YÖNETİCİ ENGELLENDİ",
                     description=str(after) + " adlı kullanıcıya izinsiz Yönetici yetkisi verildiği için yetki geri alındı.",
                     color=discord.Color.red()
                 )
@@ -195,7 +195,7 @@ async def tamyasak_ekle(interaction: discord.Interaction, member: discord.Member
     save_banlilar(banlilar)
     await interaction.response.send_message(member.name + " kara listeye eklendi.", ephemeral=True)
     
-    log_embed = discord.Embed(title="🚫 Kara Listeye Eklendi", color=discord.Color.dark_red())
+    log_embed = discord.Embed(title="Kara Listeye Eklendi", color=discord.Color.dark_red())
     log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
     log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
     await send_log(interaction.guild, log_embed)
@@ -213,7 +213,7 @@ async def tamyasak_kaldir(interaction: discord.Interaction, member: discord.Memb
         save_banlilar(banlilar)
         await interaction.response.send_message(member.name + " kara listeden çıkarıldı.", ephemeral=True)
         
-        log_embed = discord.Embed(title="✅ Kara Listeden Çıkarıldı", color=discord.Color.green())
+        log_embed = discord.Embed(title="Kara Listeden Çıkarıldı", color=discord.Color.green())
         log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
         log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
         await send_log(interaction.guild, log_embed)
@@ -276,7 +276,7 @@ async def log_kanal_ayarla(interaction: discord.Interaction, kanal: discord.Text
     save_log_channel(interaction.guild.id, kanal.id)
     await interaction.response.send_message("Log kanali güncellendi.", ephemeral=True)
     
-    log_embed = discord.Embed(title="⚙️ Log Kanalı Ayarlandı", description="Log kanalı " + kanal.mention + " olarak seçildi.", color=discord.Color.green())
+    log_embed = discord.Embed(title="Log Kanalı Ayarlandı", description="Log kanalı " + kanal.mention + " olarak seçildi.", color=discord.Color.green())
     await send_log(interaction.guild, log_embed)
 
 @bot.tree.command(name="whitelist-ekle", description="Beyaz listeye ekler.")
@@ -335,7 +335,7 @@ async def duyuru(interaction: discord.Interaction, kanal: discord.TextChannel, s
         await kanal.send(content=ping_metni, embed=embed)
         await interaction.response.send_message("Duyuru gonderildi.", ephemeral=True)
         
-        log_embed = discord.Embed(title="📢 Duyuru Gönderildi", color=discord.Color.blue())
+        log_embed = discord.Embed(title="Duyuru Gönderildi", color=discord.Color.blue())
         log_embed.add_field(name="Kanal", value=kanal.mention, inline=False)
         log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
         await send_log(interaction.guild, log_embed)
@@ -355,7 +355,7 @@ async def sil(interaction: discord.Interaction, adet: int):
         silinenler = await interaction.channel.purge(limit=adet)
         await interaction.followup.send(str(len(silinenler)) + " mesaj silindi.", ephemeral=True)
         
-        log_embed = discord.Embed(title="🗑️ Mesaj Silindi", color=discord.Color.dark_orange())
+        log_embed = discord.Embed(title="Mesaj Silindi", color=discord.Color.dark_orange())
         log_embed.add_field(name="Kanal", value=interaction.channel.mention, inline=False)
         log_embed.add_field(name="Silinen Adet", value=str(len(silinenler)), inline=False)
         log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
@@ -388,7 +388,7 @@ async def uyar(interaction: discord.Interaction, member: discord.Member, sebep: 
     embed = discord.Embed(title="Uyari", description=ceza_mesaji, color=discord.Color.orange())
     await interaction.response.send_message(embed=embed, ephemeral=True)
     
-    log_embed = discord.Embed(title="⚠️ Kullanıcı Uyarıldı", color=discord.Color.yellow())
+    log_embed = discord.Embed(title="Kullanıcı Uyarıldı", color=discord.Color.yellow())
     log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
     log_embed.add_field(name="Sebep", value=sebep, inline=False)
     log_embed.add_field(name="Toplam Uyarı", value=str(current_warns), inline=False)
@@ -405,7 +405,7 @@ async def mute(interaction: discord.Interaction, member: discord.Member, dakika:
         await member.timeout(timedelta(minutes=dakika), reason=sebep)
         await interaction.response.send_message("Kullanici susturuldu.", ephemeral=True)
         
-        log_embed = discord.Embed(title="🔇 Mute Atıldı", color=discord.Color.red())
+        log_embed = discord.Embed(title="Mute Atıldı", color=discord.Color.red())
         log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
         log_embed.add_field(name="Süre", value=str(dakika) + " dakika", inline=False)
         log_embed.add_field(name="Sebep", value=sebep, inline=False)
@@ -424,7 +424,7 @@ async def dm(interaction: discord.Interaction, member: discord.Member, mesaj: st
         await member.send(embed=embed)
         await interaction.response.send_message("DM gonderildi.", ephemeral=True)
         
-        log_embed = discord.Embed(title="📬 Yetkili DM Gönderdi", color=discord.Color.blue())
+        log_embed = discord.Embed(title="Yetkili DM Gönderdi", color=discord.Color.blue())
         log_embed.add_field(name="Alıcı", value=member.mention, inline=False)
         log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
         await send_log(interaction.guild, log_embed)
@@ -445,8 +445,9 @@ async def rolal(interaction: discord.Interaction, member: discord.Member, role: 
         await member.remove_roles(role)
         await interaction.response.send_message("Rol alindi ve kaydedildi.", ephemeral=True)
         
-        log_embed = discord.Embed(title="🛡️ Kullanıcıdan Rol Alındı", color=discord.Color.dark_purple())
+        log_embed = discord.Embed(title="Kullanıcıdan Rol Alındı", color=discord.Color.dark_purple())
         log_embed.add_field(name="Kullanıcı", value=member.mention, inline=False)
         log_embed.add_field(name="Alınan Rol", value=role.name, inline=False)
         log_embed.add_field(name="Yetkili", value=interaction.user.mention, inline=False)
-        await send_log(inte
+        await send_log(interaction.guild, log_embed)
+    exce
