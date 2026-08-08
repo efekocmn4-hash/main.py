@@ -172,24 +172,29 @@ async def log_kanal_ayarla(i: discord.Interaction, kanal: discord.TextChannel):
     await i.response.send_message("Log kanalı güncellendi.", ephemeral=True)
     await send_log(i.guild, discord.Embed(title="Log Kanalı Ayarlandı", description=f"{kanal.mention}", color=discord.Color.green()))
 
-@bot.tree.command(name="whitelist-ekle", description="Beyaz listeye ekle.")
+# Whitelist Komutları Ana Grup Altına Toplandı
+whitelist_group = app_commands.Group(name="whitelist", description="Beyaz liste yönetim komutları")
+
+@whitelist_group.command(name="ekle", description="Beyaz listeye kullanıcı ekler.")
 async def whitelist_ekle(i: discord.Interaction, member: discord.Member):
     if i.user.id != i.guild.owner_id and not i.user.guild_permissions.administrator: return await i.response.send_message("Yetkiniz yok.", ephemeral=True)
     whitelist_ids.add(member.id)
-    await i.response.send_message("Eklendi.", ephemeral=True)
+    await i.response.send_message(f"{member.mention} beyaz listeye eklendi.", ephemeral=True)
 
-@bot.tree.command(name="whitelist-cikar", description="Beyaz listeden çıkar.")
+@whitelist_group.command(name="cikar", description="Beyaz listeden kullanıcı çıkarır.")
 async def whitelist_cikar(i: discord.Interaction, member: discord.Member):
     if i.user.id != i.guild.owner_id and not i.user.guild_permissions.administrator: return await i.response.send_message("Yetkiniz yok.", ephemeral=True)
     if member.id in whitelist_ids:
         whitelist_ids.remove(member.id)
-        await i.response.send_message("Çıkarıldı.", ephemeral=True)
-    else: await i.response.send_message("Zaten listede yok.", ephemeral=True)
+        await i.response.send_message(f"{member.mention} beyaz listeden çıkarıldı.", ephemeral=True)
+    else: await i.response.send_message("Bu kullanıcı zaten beyaz listede yok.", ephemeral=True)
 
-@bot.tree.command(name="whitelist-liste", description="Listeyi göster.")
+@whitelist_group.command(name="liste", description="Beyaz listedeki kullanıcıları gösterir.")
 async def whitelist_liste(i: discord.Interaction):
-    if not whitelist_ids: return await i.response.send_message("Liste boş.", ephemeral=True)
+    if not whitelist_ids: return await i.response.send_message("Beyaz liste boş.", ephemeral=True)
     await i.response.send_message(embed=discord.Embed(title="Whitelist", description=", ".join([f"<@{uid}>" for uid in whitelist_ids]), color=discord.Color.blue()), ephemeral=True)
+
+bot.tree.add_command(whitelist_group)
 
 @bot.tree.command(name="duyuru", description="Duyuru gönder.")
 async def duyuru(i: discord.Interaction, kanal: discord.TextChannel, secim: str, baslik: str, mesaj: str):
@@ -298,3 +303,4 @@ async def ticket_olustur(i: discord.Interaction):
     await i.response.send_message("Panel kuruldu.", ephemeral=True)
 
 bot.run(TOKEN)
+                
