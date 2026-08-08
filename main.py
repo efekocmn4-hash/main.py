@@ -1,7 +1,7 @@
 import os, discord
 from discord.ext import commands
 from discord import app_commands
-from datetime import timedelta
+from datetime import timedelta, datetime
 import asyncio
 from flask import Flask
 from threading import Thread
@@ -94,38 +94,46 @@ async def on_member_unban(guild, user):
     app_commands.Choice(name="Bu Sunucudan Yasakla", value="sunucu"),
     app_commands.Choice(name="Tüm Sunuculardan Yasakla", value="global")
 ])
-async def tamyasakla(i: discord.Interaction, member: discord.Member, secenek: app_commands.Choice[str]):
+async def tamyasakla(i: discord.Interaction, member: discord.Member, secenek: app_commands.Choice[str], sebep: str):
     if i.user.id != i.guild.owner_id: return await i.response.send_message("Bu komutu sadece sunucu sahibi kullanabilir!", ephemeral=True)
     val = secenek.value
     
+    etkilenen_sunucular = []
     if val == "sunucu":
         b = oku("banlilar.txt")
         b.add(str(member.id))
         yaz("banlilar.txt", b)
-        try: await i.guild.ban(member, reason="Sunucu Tamyasaklama")
+        try: 
+            await i.guild.ban(member, reason=sebep)
+            etkilenen_sunucular.append(i.guild.name)
         except: pass
         await i.response.send_message(f"{member.name} bu sunucuda kara listeye eklenip banlandı.", ephemeral=True)
-        await send_log(i.guild, discord.Embed(title="Sunucu Tamyasak Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention))
+        await send_log(i.guild, discord.Embed(title="Sunucu Tamyasak Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Sebep", value=sebep))
     
     elif val == "global":
         gb = oku("global_banlilar.txt")
         gb.add(str(member.id))
         yaz("global_banlilar.txt", gb)
-        count = 0
         for guild in bot.guilds:
             try:
-                await guild.ban(member, reason="Global Tamyasaklama")
-                count += 1
+                await guild.ban(member, reason=sebep)
+                etkilenen_sunucular.append(guild.name)
             except: pass
-        await i.response.send_message(f"{member.name} tüm ortak sunuculardan (global) yasaklandı ({count} sunucu).", ephemeral=True)
-        await send_log(i.guild, discord.Embed(title="Global Tamyasak Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Etkilenen Sunucu", value=str(count)))
+        await i.response.send_message(f"{member.name} tüm ortak sunuculardan (global) yasaklandı ({len(etkilenen_sunucular)} sunucu).", ephemeral=True)
+        await send_log(i.guild, discord.Embed(title="Global Tamyasak Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Sebep", value=sebep).add_field(name="Etkilenen Sunucu Sayısı", value=str(len(etkilenen_sunucular))))
+
+    try:
+        sunucu_listesi_str = "\n".join([f"-{s}" for s in etkilenen_sunucular])
+        dm_metin = f"{i.user.name} Tarafından Aşağıdaki sunuculardan yasaklandınız:\n{sunucu_listesi_str}\n\nSebep:\n{sebep}"
+        await member.send(dm_metin)
+    except: pass
 
 @bot.tree.command(name="tamyasakkaldir", description="Yasağı bu sunucudan veya tüm sunuculardan kaldırır.")
 @app_commands.choices(secenek=[
     app_commands.Choice(name="Bu Sunucudan Yasak Kaldır", value="sunucu"),
     app_commands.Choice(name="Tüm Sunuculardan Kaldır", value="global")
 ])
-async def tamyasakkaldir(i: discord.Interaction, user_id: str, secenek: app_commands.Choice[str]):
+async def tamyasakkaldir(i: discord.Interaction, user_id: str, secenek: app_commands.Choice[str], sebep: str):
     if i.user.id != i.guild.owner_id: return await i.response.send_message("Bu komutu sadece sunucu sahibi kullanabilir!", ephemeral=True)
     val = secenek.value
     
@@ -137,10 +145,10 @@ async def tamyasakkaldir(i: discord.Interaction, user_id: str, secenek: app_comm
         if str(uid) in b:
             b.discard(str(uid))
             yaz("banlilar.txt", b)
-            try: await i.guild.unban(discord.Object(id=uid), reason="Sunucu Tamyasak Kaldırma")
+            try: await i.guild.unban(discord.Object(id=uid), reason=sebep)
             except: pass
-            await i.response.send_message(f"Kullanıcının bu sunucudaki yasağı kaldırıldı.", ephemeral=True)
-            await send_log(i.guild, discord.Embed(title="Sunucu Tamyasak Kaldırıldı", color=discord.Color.green()).add_field(name="User ID", value=str(uid)))
+            await i.response.send_message(f"Kullanıcının bu sunucudaki yasağı kaldırıldı. Sebep: {sebep}", ephemeral=True)
+            await send_log(i.guild, discord.Embed(title="Sunucu Tamyasak Kaldırıldı", color=discord.Color.green()).add_field(name="User ID", value=str(uid)).add_field(name="Sebep", value=sebep))
         else: await i.response.send_message("Bu kullanıcı bu sunucunun kara listesinde kayıtlı değil.", ephemeral=True)
 
     elif val == "global":
@@ -151,11 +159,11 @@ async def tamyasakkaldir(i: discord.Interaction, user_id: str, secenek: app_comm
             count = 0
             for guild in bot.guilds:
                 try:
-                    await guild.unban(discord.Object(id=uid), reason="Global Tamyasak Kaldırma")
+                    await guild.unban(discord.Object(id=uid), reason=sebep)
                     count += 1
                 except: pass
-            await i.response.send_message(f"Kullanıcının global yasağı kaldırıldı ({count} sunucuda işlem denendi).", ephemeral=True)
-            await send_log(i.guild, discord.Embed(title="Global Tamyasak Kaldırıldı", color=discord.Color.green()).add_field(name="User ID", value=str(uid)))
+            await i.response.send_message(f"Kullanıcının global yasağı kaldırıldı ({count} sunucuda işlem denendi). Sebep: {sebep}", ephemeral=True)
+            await send_log(i.guild, discord.Embed(title="Global Tamyasak Kaldırıldı", color=discord.Color.green()).add_field(name="User ID", value=str(uid)).add_field(name="Sebep", value=sebep))
         else: await i.response.send_message("Bu kullanıcı global kara listede bulunamadı.", ephemeral=True)
 
 @bot.tree.command(name="log-kanal-ayarla", description="Log kanalını ayarla.")
@@ -222,23 +230,38 @@ async def uyar(i: discord.Interaction, member: discord.Member, sebep: str):
     w = oku("warns.txt")
     w[member.id] = w.get(member.id, 0) + 1
     yaz("warns.txt", w)
-    msg = f"Uyarildiniz. Toplam uyari: {w[member.id]}"
+    
+    tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
+    msg = f"{tarih} Tarihinde {i.guild.name} İsimli sunucuda {i.user.name} Tarafından uyarıldınız\nSebep:{sebep}"
+    
     if w[member.id] >= 3:
         try:
             await member.timeout(timedelta(minutes=30), reason="3 uyari siniri")
             w[member.id] = 0; yaz("warns.txt", w)
-            msg += " ve 30 dakika mute yediniz."
+            msg += "\n(3 uyarı sınırına ulaştığınız için 30 dakika süreyle susturuldunuz.)"
         except: pass
-    await i.response.send_message(embed=discord.Embed(title="Uyari", description=msg, color=discord.Color.orange()), ephemeral=True)
-    await send_log(i.guild, discord.Embed(title="Kullanıcı Uyarıldı", color=discord.Color.yellow()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Sebep", value=sebep))
+        
+    try:
+        await member.send(msg)
+    except: pass
+
+    await i.response.send_message(embed=discord.Embed(title="Uyari", description=f"Kullanıcı uyarıldı. Toplam uyarı: {w.get(member.id, 0)}", color=discord.Color.orange()), ephemeral=True)
+    await send_log(i.guild, discord.Embed(title="Kullanıcı Uyarıldı", color=discord.Color.yellow()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Sebep", value=sebep).add_field(name="Toplam Uyarı", value=str(w.get(member.id, 0))))
 
 @bot.tree.command(name="mute", description="Sustur.")
 async def mute(i: discord.Interaction, member: discord.Member, dakika: int, sebep: str):
     if not whitelist_kontrol(i): return await i.response.send_message("Yetkiniz yok.", ephemeral=True)
     try:
         await member.timeout(timedelta(minutes=dakika), reason=sebep)
-        await i.response.send_message("Susturuldu.", ephemeral=True)
-        await send_log(i.guild, discord.Embed(title="Mute Atıldı", color=discord.Color.red()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Süre", value=f"{dakika} dk"))
+        
+        tarih = datetime.now().strftime("%d.%m.%Y %H:%M")
+        dm_msg = f"{tarih} Tarihinde {i.guild.name} İsimli sunucuda {i.user.name} Tarafından susturuldunuz\nSebep:{sebep}"
+        try:
+            await member.send(dm_msg)
+        except: pass
+
+        await i.response.send_message("Susturuldu ve kullanıcıya DM gönderildi.", ephemeral=True)
+        await send_log(i.guild, discord.Embed(title="Mute Atıldı", color=discord.Color.red()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Süre", value=f"{dakika} dk").add_field(name="Sebep", value=sebep))
     except Exception as e: await i.response.send_message(f"Hata: {e}", ephemeral=True)
 
 @bot.tree.command(name="dm", description="DM gönder.")
@@ -305,4 +328,4 @@ async def ticket_olustur(i: discord.Interaction):
     await i.response.send_message("Panel kuruldu.", ephemeral=True)
 
 bot.run(TOKEN)
-        
+    
