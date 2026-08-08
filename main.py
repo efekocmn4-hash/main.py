@@ -75,8 +75,14 @@ async def on_ready():
     print("Bot Hazir:", bot.user)
 
 @bot.event
+async def on_member_join(member):
+    if str(member.id) in oku("global_banlilar.txt"):
+        try: await member.ban(reason="Global Kara Liste Koruması!")
+        except: pass
+
+@bot.event
 async def on_member_unban(guild, user):
-    if str(user.id) in oku("banlilar.txt"):
+    if str(user.id) in oku("banlilar.txt") or str(user.id) in oku("global_banlilar.txt"):
         try:
             await guild.ban(user, reason="Kara liste koruması!")
             await send_log(guild, discord.Embed(title="Kara Liste Ban Koruması", description=f"{user} tekrar banlandı!", color=discord.Color.red()))
@@ -92,25 +98,76 @@ async def on_member_update(before, after):
                 await send_log(after.guild, discord.Embed(title="İZİNSİZ YÖNETİCİ ENGELLENDİ", description=f"{after} adlı kullanıcıdan yetki alındı.", color=discord.Color.red()))
             except: pass
 
-@bot.tree.command(name="tamyasak-ekle", description="Kara listeye ekler.")
-async def tamyasak_ekle(i: discord.Interaction, member: discord.Member):
-    if i.user.id != i.guild.owner_id: return await i.response.send_message("Sadece sunucu sahibi!", ephemeral=True)
-    b = oku("banlilar.txt")
-    b.add(member.id)
-    yaz("banlilar.txt", b)
-    await i.response.send_message(f"{member.name} eklendi.", ephemeral=True)
-    await send_log(i.guild, discord.Embed(title="Kara Listeye Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention))
-
-@bot.tree.command(name="tamyasak-kaldir", description="Kara listeden çıkarır.")
-async def tamyasak_kaldir(i: discord.Interaction, member: discord.Member):
-    if i.user.id != i.guild.owner_id: return await i.response.send_message("Sadece sunucu sahibi!", ephemeral=True)
-    b = oku("banlilar.txt")
-    if member.id in b or str(member.id) in b:
-        b.discard(member.id); b.discard(str(member.id))
+@bot.tree.command(name="tamyasakla", description="Kullanıcıyı bu sunucudan veya tüm sunuculardan yasaklar.")
+@app_commands.choices(secenek=[
+    app_commands.Choice(name="Bu Sunucudan Yasakla", value="sunucu"),
+    app_commands.Choice(name="Tüm Sunuculardan Yasakla", value="global")
+])
+async def tamyasakla(i: discord.Interaction, member: discord.Member, secenek: str):
+    if i.user.id != i.guild.owner_id: return await i.response.send_message("Bu komutu sadece sunucu sahibi kullanabilir!", ephemeral=True)
+    
+    if secenek == "sunucu":
+        b = oku("banlilar.txt")
+        b.add(member.id)
         yaz("banlilar.txt", b)
-        await i.response.send_message(f"{member.name} çıkarıldı.", ephemeral=True)
-        await send_log(i.guild, discord.Embed(title="Kara Listeden Çıkarıldı", color=discord.Color.green()).add_field(name="Kullanıcı", value=member.mention))
-    else: await i.response.send_message("Zaten listede yok.", ephemeral=True)
+        try: await i.guild.ban(member, reason="Sunucu Tamyasaklama")
+        except: pass
+        await i.response.send_message(f"{member.name} bu sunucuda kara listeye eklenip banlandı.", ephemeral=True)
+        await send_log(i.guild, discord.Embed(title="Sunucu Tamyasak Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention))
+    
+    elif secenek == "global":
+        gb = oku("global_banlilar.txt")
+        gb.add(member.id)
+        yaz("global_banlilar.txt", gb)
+        
+        count = 0
+        for guild in bot.guilds:
+            try:
+                await guild.ban(member, reason="Global Tamyasaklama")
+                count += 1
+            except: pass
+            
+        await i.response.send_message(f"{member.name} tüm ortak sunuculardan (global) yasaklandı ({count} sunucu).", ephemeral=True)
+        await send_log(i.guild, discord.Embed(title="Global Tamyasak Eklendi", color=discord.Color.dark_red()).add_field(name="Kullanıcı", value=member.mention).add_field(name="Etkilenen Sunucu", value=str(count)))
+
+@bot.tree.command(name="tamyasakkaldir", description="Kullanıcının yasagini bu sunucudan veya tüm sunuculardan kaldırır.")
+@app_commands.choices(secenek=[
+    app_commands.Choice(name="Bu Sunucudan Yasak Kaldır", value="sunucu"),
+    app_commands.Choice(name="Tüm Sunuculardan Kaldır", value="global")
+])
+async def tamyasakkaldir(i: discord.Interaction, user_id: str, secenek: str):
+    if i.user.id != i.guild.owner_id: return await i.response.send_message("Bu komutu sadece sunucu sahibi kullanabilir!", ephemeral=True)
+    
+    try: uid = int(user_id)
+    except: return await i.response.send_message("Lütfen geçerli bir kullanıcı ID'si girin!", ephemeral=True)
+
+    if secenek == "sunucu":
+        b = oku("banlilar.txt")
+        if uid in b or str(uid) in b:
+            b.discard(uid); b.discard(str(uid))
+            yaz("banlilar.txt", b)
+            try: await i.guild.unban(discord.Object(id=uid), reason="Sunucu Tamyasak Kaldırma")
+            except: pass
+            await i.response.send_message(f"Kullanıcının bu sunucudaki yasağı kaldırıldı.", ephemeral=True)
+            await send_log(i.guild, discord.Embed(title="Sunucu Tamyasak Kaldırıldı", color=discord.Color.green()).add_field(name="User ID", value=str(uid)))
+        else: await i.response.send_message("Bu kullanıcı bu sunucunun kara listesinde kayıtlı değil.", ephemeral=True)
+
+    elif secenek == "global":
+        gb = oku("global_banlilar.txt")
+        if uid in gb or str(uid) in gb:
+            gb.discard(uid); gb.discard(str(uid))
+            yaz("global_banlilar.txt", gb)
+            
+            count = 0
+            for guild in bot.guilds:
+                try:
+                    await guild.unban(discord.Object(id=uid), reason="Global Tamyasak Kaldırma")
+                    count += 1
+                except: pass
+                
+            await i.response.send_message(f"Kullanıcının global yasağı kaldırıldı ({count} sunucuda işlem denendi).", ephemeral=True)
+            await send_log(i.guild, discord.Embed(title="Global Tamyasak Kaldırıldı", color=discord.Color.green()).add_field(name="User ID", value=str(uid)))
+        else: await i.response.send_message("Bu kullanıcı global kara listede bulunamadı.", ephemeral=True)
 
 @bot.tree.command(name="komut-yetki-ekle", description="Komut yetkilendir.")
 async def komut_yetki_ekle(i: discord.Interaction, komut_adi: str, role: discord.Role):
@@ -282,4 +339,4 @@ async def ticket_olustur(i: discord.Interaction):
     await i.response.send_message("Panel kuruldu.", ephemeral=True)
 
 bot.run(TOKEN)
-        
+                
