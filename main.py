@@ -108,7 +108,6 @@ async def tamyasakla(i: discord.Interaction, kullanici: str, secenek: app_comman
     except: return await i.followup.send("Geçersiz kullanıcı ID'si veya etiket.", ephemeral=True)
 
     val = secenek.value
-    
     etkilenen_sunucular = []
     if val == "sunucu":
         etkilenen_sunucular.append(i.guild.name)
@@ -116,20 +115,18 @@ async def tamyasakla(i: discord.Interaction, kullanici: str, secenek: app_comman
         for guild in bot.guilds:
             etkilenen_sunucular.append(guild.name)
 
-    # 2. Görseldeki Format (İşlem Tamamlandı)
-    server_list_str = "\n".join([f"- {s}" for s in etkilenen_sunucular]) if etkilenen_sunucular else f"- {i.guild.name}"
-    description = f"{target_user.mention} (`@{target_user.name}`) isimli kişi aşağıdaki sunuculardan yasaklandı:\n\n{server_list_str}\n\nSebep: {sebep}"
+    server_list_str = "\n".join([f"- {s}" for s in etkilenen_sunucular])
+    
+    # DM Mesajı (Kişiye giden)
+    dm_desc = f"{i.user.mention} tarafından aşağıdaki sunuculardan yasaklandınız:\n\n{server_list_str}\n\nSebep: {sebep}"
+    dm_embed = discord.Embed(title="🛡️ Yasaklama Bildirimi", description=dm_desc, color=discord.Color.dark_red())
+    
+    # Sunucu içi mesaj
+    server_msg_desc = f"{target_user.mention} (`@{target_user.name}`) isimli kişi aşağıdaki sunuculardan yasaklandı:\n\n{server_list_str}\n\nSebep: {sebep}"
+    server_embed = discord.Embed(title="✅ İşlem Tamamlandı", description=server_msg_desc, color=discord.Color.green())
 
-    embed = discord.Embed(
-        title="✅ İşlem Tamamlandı",
-        description=description,
-        color=discord.Color.green()
-    )
-
-    try: 
-        await target_user.send(embed=embed)
-    except: 
-        pass
+    try: await target_user.send(embed=dm_embed)
+    except: pass
 
     if val == "sunucu":
         b = oku("banlilar.txt")
@@ -145,14 +142,13 @@ async def tamyasakla(i: discord.Interaction, kullanici: str, secenek: app_comman
             try: await guild.ban(target_user, reason=sebep)
             except: pass
 
-    await i.followup.send(embed=embed)
-    await send_log(i.guild, embed)
+    await i.followup.send(embed=server_embed)
+    await send_log(i.guild, server_embed)
 
 @bot.tree.command(name="tamyasakkaldir", description="Yasağı kaldırır.")
 @app_commands.choices(secenek=[app_commands.Choice(name="Bu Sunucudan Yasak Kaldır", value="sunucu"), app_commands.Choice(name="Tüm Sunuculardan Kaldır", value="global")])
 async def tamyasakkaldir(i: discord.Interaction, kullanici: str, secenek: app_commands.Choice[str], sebep: str):
     if i.user.id != i.guild.owner_id: return await i.response.send_message("Sadece sunucu sahibi kullanabilir!", ephemeral=True)
-    
     clean_id = "".join(filter(str.isdigit, kullanici))
     try: uid = int(clean_id)
     except: return await i.response.send_message("Geçersiz ID.", ephemeral=True)
@@ -179,14 +175,8 @@ async def uyar(i: discord.Interaction, member: discord.Member, sebep: str):
     w[member.id] = w.get(member.id, 0) + 1
     yaz("warns.txt", w)
     
-    # 1. Görseldeki Format (Kullanıcı Adı ve Etiket Birlikte)
     desc = f"{i.user.mention} (`@{i.user.name}`) tarafından {member.mention} (`@{member.name}`) kullanıcısı **{sebep}** sebebiyle uyarıldı. (Toplam Uyarı: {w.get(member.id, 0)})"
-    
-    embed = discord.Embed(
-        title="🛡️ Uyarı İşlemi",
-        description=desc,
-        color=discord.Color.orange()
-    )
+    embed = discord.Embed(title="🛡️ Uyarı İşlemi", description=desc, color=discord.Color.orange())
     
     try: await member.send(embed=embed)
     except: pass
@@ -205,16 +195,8 @@ async def mute(i: discord.Interaction, member: discord.Member, dakika: int, sebe
     if not whitelist_kontrol(i): return await i.response.send_message("Yetkiniz yok.", ephemeral=True)
     try:
         await member.timeout(timedelta(minutes=dakika), reason=sebep)
-        
-        # 1. Görseldeki Format (Kullanıcı Adı ve Etiket Birlikte)
         desc = f"{i.user.mention} (`@{i.user.name}`) tarafından {member.mention} (`@{member.name}`) kullanıcısı **{sebep}** sebebiyle {dakika} dakika susturuldu."
-        
-        embed = discord.Embed(
-            title="🛡️ Susturma İşlemi",
-            description=desc,
-            color=discord.Color.red()
-        )
-        
+        embed = discord.Embed(title="🛡️ Susturma İşlemi", description=desc, color=discord.Color.red())
         try: await member.send(embed=embed)
         except: pass
         await i.response.send_message(embed=embed, ephemeral=True)
@@ -338,4 +320,4 @@ async def ticket_olustur(i: discord.Interaction):
     await i.response.send_message("Panel kuruldu.", ephemeral=True)
 
 bot.run(TOKEN)
-                    
+    
