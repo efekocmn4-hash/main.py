@@ -245,9 +245,11 @@ async def mute(i: discord.Interaction, member: discord.Member, dakika: int, sebe
 async def dm(i: discord.Interaction, member: discord.Member, mesaj: str):
     if not whitelist_kontrol(i): return await i.response.send_message("Yetkiniz yok.", ephemeral=True)
     try:
-        await member.send(embed=discord.Embed(title="Yetkili Mesajı", description=mesaj, color=discord.Color.orange()))
+        embed = discord.Embed(title="Yetkili Mesajı", description=mesaj, color=discord.Color.orange())
+        embed.add_field(name="Gönderen Yetkili", value=f"{i.user.name} (`{i.user.id}`)", inline=False)
+        await member.send(embed=embed)
         await i.response.send_message("Gönderildi.", ephemeral=True)
-        await send_log(i.guild, discord.Embed(title="DM Gönderildi", color=discord.Color.blue()).add_field(name="Alıcı", value=member.mention))
+        await send_log(i.guild, discord.Embed(title="DM Gönderildi", color=discord.Color.blue()).add_field(name="Alıcı", value=member.mention).add_field(name="Gönderen", value=i.user.mention))
     except: await i.response.send_message("DM kapalı.", ephemeral=True)
 
 @bot.tree.command(name="rolal", description="Rol al.")
@@ -303,4 +305,4 @@ async def ticket_olustur(i: discord.Interaction):
     await i.response.send_message("Panel kuruldu.", ephemeral=True)
 
 bot.run(TOKEN)
-                
+        
