@@ -160,9 +160,9 @@ async def on_ready():
 @bot.event
 async def on_member_unban(guild, user):
     banlilar = get_banlilar()
-    if str(user.id) in banlilar:
+    if str(user.id) in [str(u) for u in banlilar]:
         try:
-            await guild.ban(user, reason="Kalici Guvenlik")
+            await guild.ban(user, reason="Kara liste koruması: Bot banı kaldırılamaz!")
         except Exception:
             pass
 
@@ -172,7 +172,7 @@ async def on_member_update(before, after):
         new_role = next((role for role in after.roles if role not in before.roles), None)
         if new_role and new_role.permissions.administrator and not after.guild_owner:
             try:
-                await after.edit(roles=[r for r in before.roles], reason="Izinsiz Yonetici Engellendi")
+                await after.edit(roles=[r for r in before.roles], reason="IZINSIZ YONETICI ENGELLENDI")
                 embed = discord.Embed(
                     title="IZINSIZ YONETICI ENGELLENDI",
                     description="Kullaniciya izinsiz Yonetici yetkisi verildiği için yetki geri alindi.",
@@ -181,6 +181,32 @@ async def on_member_update(before, after):
                 await send_log(after.guild, embed)
             except Exception:
                 pass
+
+@bot.tree.command(name="tamyasak-ekle", description="Bir kullanıcıyı kara listeye ekler (Ban koruması).")
+async def tamyasak_ekle(interaction: discord.Interaction, member: discord.Member):
+    if interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("Sadece sunucu sahibi kullanabilir.", ephemeral=True)
+        return
+    
+    banlilar = get_banlilar()
+    banlilar.add(member.id)
+    save_banlilar(banlilar)
+    await interaction.response.send_message(member.name + " kara listeye eklendi.", ephemeral=True)
+
+@bot.tree.command(name="tamyasak-kaldir", description="Bir kullanıcıyı kara listeden çıkarır.")
+async def tamyasak_kaldir(interaction: discord.Interaction, member: discord.Member):
+    if interaction.user.id != interaction.guild.owner_id:
+        await interaction.response.send_message("Sadece sunucu sahibi kullanabilir.", ephemeral=True)
+        return
+    
+    banlilar = get_banlilar()
+    if member.id in banlilar or str(member.id) in banlilar:
+        banlilar.discard(member.id)
+        banlilar.discard(str(member.id))
+        save_banlilar(banlilar)
+        await interaction.response.send_message(member.name + " kara listeden çıkarıldı.", ephemeral=True)
+    else:
+        await interaction.response.send_message("Bu kişi zaten listede yok.", ephemeral=True)
 
 @bot.tree.command(name="komut-yetki-ekle", description="Bir komutu belirli bir role acar.")
 async def komut_yetki_ekle(interaction: discord.Interaction, komut_adi: str, role: discord.Role):
@@ -439,4 +465,4 @@ async def ticket_olustur(interaction: discord.Interaction):
 if __name__ == "__main__":
     keep_alive()
     bot.run(TOKEN)
-        
+    
