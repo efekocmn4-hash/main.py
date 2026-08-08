@@ -297,14 +297,41 @@ async def tum_rolleri_geri_ver(i: discord.Interaction, member: discord.Member):
         await send_log(i.guild, discord.Embed(title="Roller Geri Verildi", color=discord.Color.green()).add_field(name="Kullanıcı", value=member.mention))
     except Exception as e: await i.response.send_message(f"Hata: {e}", ephemeral=True)
 
+class TicketModal(discord.ui.Modal, title="Destek Talep Formu"):
+    isim = discord.ui.TextInput(label="İsim", placeholder="Adınızı giriniz...", required=True)
+    sikayet = discord.ui.TextInput(label="Şikayet", style=discord.TextStyle.paragraph, placeholder="Şikayetinizi detaylıca yazın...", required=True)
+    kanit = discord.ui.TextInput(label="Kanıt/SS", placeholder="Kanıt linkini (Görsel/Video) buraya yapıştırın...", required=True)
+
+    async def on_submit(self, i: discord.Interaction):
+        await i.response.defer(ephemeral=True)
+        cat = discord.utils.get(i.guild.categories, name="DESTEK TALEPLERI") or await i.guild.create_category("DESTEK TALEPLERI")
+        ch = await i.guild.create_text_channel(
+            f"destek-{i.user.name}", 
+            category=cat, 
+            overwrites={
+                i.guild.default_role: discord.PermissionOverwrite(read_messages=False), 
+                i.user: discord.PermissionOverwrite(read_messages=True, send_messages=True), 
+                i.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            }
+        )
+        
+        embed = discord.Embed(title="Destek Talebi", color=discord.Color.gold())
+        embed.add_field(name="Açan Kullanıcı", value=i.user.mention, inline=False)
+        embed.add_field(name="İsim", value=self.isim.value, inline=False)
+        embed.add_field(name="Şikayet", value=self.sikayet.value, inline=False)
+        embed.add_field(name="Kanıt/SS", value=self.kanit.value, inline=False)
+        
+        view = discord.ui.View(timeout=None)
+        view.add_item(discord.ui.Button(label="Kapat", style=discord.ButtonStyle.red, custom_id="close_ticket"))
+        
+        await ch.send(content="@here", embed=embed, view=view)
+        await i.followup.send(f"Destek kanalınız oluşturuldu: {ch.mention}", ephemeral=True)
+
 class TicketView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None)
     @discord.ui.button(label="Destek Aç", style=discord.ButtonStyle.green, custom_id="create_ticket")
     async def create_ticket(self, i: discord.Interaction, button: discord.ui.Button):
-        cat = discord.utils.get(i.guild.categories, name="DESTEK TALEPLERI") or await i.guild.create_category("DESTEK TALEPLERI")
-        ch = await i.guild.create_text_channel(f"destek-{i.user.name}", category=cat, overwrites={i.guild.default_role: discord.PermissionOverwrite(read_messages=False), i.user: discord.PermissionOverwrite(read_messages=True, send_messages=True), i.guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)})
-        await ch.send(i.user.mention, embed=discord.Embed(title="Destek", description="Yetkililer ilgilenecek.", color=discord.Color.gold()), view=discord.ui.View().add_item(discord.ui.Button(label="Kapat", style=discord.ButtonStyle.red, custom_id="close_ticket")))
-        await i.response.send_message(f"Açıldı: {ch.mention}", ephemeral=True)
+        await i.response.send_modal(TicketModal())
 
 @bot.event
 async def on_interaction(interaction):
@@ -320,4 +347,3 @@ async def ticket_olustur(i: discord.Interaction):
     await i.response.send_message("Panel kuruldu.", ephemeral=True)
 
 bot.run(TOKEN)
-    
